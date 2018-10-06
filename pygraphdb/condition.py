@@ -3,7 +3,7 @@ import sqlalchemy.sql as sql
 
 class Condition(object):
     def requires_properties(self):
-        return []
+        return set()
 
     def assign_sql_columns(self, assignment_dictionary):
         """Assigns the sql column names to the query, using a dictionary mapping property name to sql column name"""
@@ -14,22 +14,31 @@ class Condition(object):
         raise ValueError("Not a complete condition")
 
     def __eq__(self, other):
-        return BinaryComparison(self, other, op.eq)
+        return BinaryOperator(self, other, op.eq)
 
     def __ne__(self, other):
-        return BinaryComparison(self, other, op.ne)
+        return BinaryOperator(self, other, op.ne)
 
     def __ge__(self, other):
-        return BinaryComparison(self, other, op.ge)
+        return BinaryOperator(self, other, op.ge)
 
     def __gt__(self, other):
-        return BinaryComparison(self, other, op.gt)
+        return BinaryOperator(self, other, op.gt)
 
     def __le__(self, other):
-        return BinaryComparison(self, other, op.le)
+        return BinaryOperator(self, other, op.le)
 
     def __lt__(self, other):
-        return BinaryComparison(self, other, op.lt)
+        return BinaryOperator(self, other, op.lt)
+
+    def __and__(self, other):
+        return BinaryOperator(self, other, op.and_)
+
+    def __or__(self, other):
+        return BinaryOperator(self, other, op.or_)
+
+    def __invert__(self):
+        return UnaryOperator(self, op.inv)
 
 
 class Property(Condition):
@@ -38,7 +47,7 @@ class Property(Condition):
         self._sql_column = sql.literal_column("column_" + name)
 
     def requires_properties(self):
-        return [self._name]
+        return {self._name}
 
     def assign_sql_columns(self, assignment_dictionary):
         self._sql_column = assignment_dictionary[self._name]
@@ -59,14 +68,16 @@ def _to_condition(obj):
     else:
         return obj
 
-class BinaryComparison(Condition):
+class BinaryOperator(Condition):
     def __init__(self, first, second, comparison_operator):
         self._first = _to_condition(first)
         self._second = _to_condition(second)
         self._comparison_operator = comparison_operator
 
     def requires_properties(self):
-        return self._first.requires_properties()+self._second.requires_properties()
+        first = self._first.requires_properties()
+        second = self._second.requires_properties()
+        return first.union(second)
 
     def assign_sql_columns(self, assignment_dictionary):
         self._first.assign_sql_columns(assignment_dictionary)
@@ -74,3 +85,17 @@ class BinaryComparison(Condition):
 
     def to_sql(self):
         return self._comparison_operator(self._first.to_sql(), self._second.to_sql())
+
+class UnaryOperator(Condition):
+    def __init__(self, underlying, operator):
+        self._underlying = underlying
+        self._operator = operator
+
+    def requires_properties(self):
+        return self._underlying.requires_properties()
+
+    def assign_sql_columns(self, assignment_dictionary):
+        self._underlying.assign_sql_columns(assignment_dictionary)
+
+    def to_sql(self):
+        return self._operator(self._underlying.to_sql())

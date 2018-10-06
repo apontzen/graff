@@ -27,6 +27,9 @@ def add(category_, properties={}):
     session.commit()
     return new_node
 
+class QueryStructureError(RuntimeError):
+    pass
+
 class BaseQuery(object):
     def __init__(self):
         session = connection.get_session()
@@ -93,7 +96,7 @@ class BaseQuery(object):
 
 
 class NodeQuery(BaseQuery):
-    def __init__(self, category_):
+    def __init__(self, category_=None):
         if category_:
             self._category = category.get_id(category_)
         else:
@@ -132,7 +135,7 @@ class FollowQuery(NodeQuery):
             self._connection.execute(insert_statement)
 
 
-class NodeAllPropertiesQuery(BaseQuery):
+class NodeAllPropertiesQuery(NodeQuery):
 
     def _get_temp_table_columns(self):
         return  [Column('id', Integer, primary_key=True),
@@ -161,8 +164,7 @@ class NodeAllPropertiesQuery(BaseQuery):
             .join(orm.Node, orm.Node.id==self._temp_table.c.node_id)
 
 
-class NodeNamedPropertiesQuery(BaseQuery):
-
+class NodeQueryWithValuesForInternalUse(NodeQuery):
     def _get_temp_table_columns(self):
         cols = [Column('id', Integer, primary_key=True),
                 Column('node_id', Integer, ForeignKey('nodes.id'))]
@@ -171,7 +173,7 @@ class NodeNamedPropertiesQuery(BaseQuery):
         return cols
 
     def __init__(self, base, *categories):
-        super(NodeNamedPropertiesQuery, self).__init__()
+        super(NodeQueryWithValuesForInternalUse, self).__init__()
         self._category_names = categories
         self._categories = [category.get_id(c) for c in categories]
         self._base = base
@@ -199,6 +201,9 @@ class NodeNamedPropertiesQuery(BaseQuery):
 
             self._connection.execute(insert_statement)
 
+
+
+class NodeNamedPropertiesQuery(NodeQueryWithValuesForInternalUse):
     def _get_temp_table_query(self):
 
         aliases = []
@@ -214,7 +219,10 @@ class NodeNamedPropertiesQuery(BaseQuery):
 
         return q
 
-class NodeFilterNamedPropertiesQuery(NodeNamedPropertiesQuery):
+    def with_property(self, *args):
+        raise QueryStructureError("with_property(...) should be the last clause of a query construction")
+
+class NodeFilterNamedPropertiesQuery(NodeQueryWithValuesForInternalUse):
     def __init__(self, base, cond):
         self._condition = cond
         categories = cond.requires_properties()
@@ -241,6 +249,7 @@ class NodeFilterNamedPropertiesQuery(NodeNamedPropertiesQuery):
         delete_query = self._temp_table.delete().where(self._temp_table.c.id.in_(subq))
 
         self._connection.execute(delete_query)
+
 
 def query(*args):
     return NodeQuery(*args)
