@@ -1,5 +1,5 @@
-from . import orm, category, connection
-from sqlalchemy import Table, Column, Integer, ForeignKey, Float
+from . import orm, category, connection, condition
+from sqlalchemy import Table, Column, Integer, ForeignKey, Float, sql
 from sqlalchemy.orm import aliased
 from six import iteritems
 import random
@@ -19,7 +19,7 @@ def add(category_, properties={}):
         prop = orm.NodeProperty()
         prop.node_id = new_node.id
         prop.category_id = category.get_existing_or_new_id(k)
-        prop.value.set_value(v)
+        prop.value = v
         property_objects.append(prop)
 
     session.add_all(property_objects)
@@ -65,6 +65,9 @@ class BaseQuery(object):
             results = self._get_temp_table_query().all()
         return results
 
+    def filter(self, condition):
+        return NodeFilterNamedPropertiesQuery(self, condition)
+
     def temp_table(self):
         if self._temp_table is None:
             raise RuntimeError("Cannot get the temp_table without first entering the query")
@@ -84,6 +87,10 @@ class BaseQuery(object):
     def __exit__(self, *args):
         self._destroy_temp_table()
 
+    def follow(self, *args):
+        """Return a query that follows an edge to the next node"""
+        return FollowQuery(self, *args)
+
 
 class NodeQuery(BaseQuery):
     def __init__(self, category_):
@@ -100,10 +107,6 @@ class NodeQuery(BaseQuery):
         orm_query = self._session.query(orm.Node.id).filter_by(category_id=self._category)
         insert_statement = self._temp_table.insert().from_select(['node_id'], orm_query)
         self._connection.execute(insert_statement)
-
-    def follow(self, *args):
-        """Return a query that follows an edge to the next node"""
-        return FollowQuery(self, *args)
 
     def with_property(self, *args):
         """Return a query that returns properties"""
@@ -173,6 +176,9 @@ class NodeNamedPropertiesQuery(BaseQuery):
         self._categories = [category.get_id(c) for c in categories]
         self._base = base
 
+    def _get_temp_table_column_mapping(self):
+        return {name: sql.literal_column('property_value_%d'%i) for i, name in enumerate(self._category_names)}
+
     def _populate_temp_table(self):
         with self._base:
             prev_table = self._base.temp_table()
@@ -199,7 +205,7 @@ class NodeNamedPropertiesQuery(BaseQuery):
         for cid in self._categories:
             aliases += [aliased(orm.NodeProperty)]
 
-        q = self._session.query(orm.Node,*[a.value for a in aliases]).select_from(self._temp_table)
+        q = self._session.query(orm.Node,*[a.value.label("property_value_%d"%i) for i,a in enumerate(aliases)]).select_from(self._temp_table)
 
         for i, alias in enumerate(aliases):
             q = q.outerjoin(alias, alias.id==getattr(self._temp_table.c, "property_id_%d"%i))
@@ -207,6 +213,34 @@ class NodeNamedPropertiesQuery(BaseQuery):
         q = q.join(orm.Node, orm.Node.id==self._temp_table.c.node_id)
 
         return q
+
+class NodeFilterNamedPropertiesQuery(NodeNamedPropertiesQuery):
+    def __init__(self, base, cond):
+        self._condition = cond
+        categories = cond.requires_properties()
+        super(NodeFilterNamedPropertiesQuery, self).__init__(base, *categories)
+
+    def _filter_temp_table(self):
+        # in principle it would be neater to use a joined delete here, but sqlite doesn't support it
+        # so we construct a subquery to figure out what to delete instead
+
+
+        subq = self._session.query(self._temp_table.c.id)
+
+        val_map = {}
+
+        for i, category_name in enumerate(self._category_names):
+            alias = aliased(orm.NodeProperty)
+            subq = subq.outerjoin(alias, alias.id == getattr(self._temp_table.c, "property_id_%d" % i))
+            val_map[category_name] = alias.value # this joined property should be used as the value in the condition we're evaluating
+
+        self._condition.assign_sql_columns(val_map)
+        delete_condition = ~(self._condition.to_sql()) # delete what we don't want to keep
+        subq = subq.filter(delete_condition).subquery() # This subquery now identifies the IDs we don't want to keep
+
+        delete_query = self._temp_table.delete().where(self._temp_table.c.id.in_(subq))
+
+        self._connection.execute(delete_query)
 
 def query(*args):
     return NodeQuery(*args)

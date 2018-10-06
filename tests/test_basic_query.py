@@ -55,11 +55,9 @@ def test_with_property_no_results():
 def test_with_property_multiple_unnamed_results():
     results = pygraphdb.node.query("multipropertynode").with_property().all()
     expected = [(multiproperty_node,1), (multiproperty_node,"two")]
-    print(results)
     assert (results == expected) or (results == expected[:-1])
 
 def test_with_property_multiple_named_results():
     results = pygraphdb.node.query("multipropertynode").with_property("property2","property1").all()
-    print(results)
     expected = [(multiproperty_node,"two",1)]
     assert results==expected

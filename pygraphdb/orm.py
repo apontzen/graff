@@ -1,8 +1,7 @@
-from sqlalchemy import Column, Integer, Float, String, ForeignKey, Index
+from sqlalchemy import Column, Integer, Float, String, ForeignKey, Index, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, composite
-
-from .flexible_value import FlexibleValue
+from sqlalchemy.ext.hybrid import hybrid_property
 
 Base = declarative_base()
 
@@ -24,6 +23,9 @@ class Node(Base):
     category_id = Column(Integer, ForeignKey("categories.id"))
     category = relationship(Category)
 
+    def __repr__(self):
+        return "<Node id=%d category=%r>"%(self.id, self.category.name)
+
 
 class Edge(Base):
     __tablename__ = "edges"
@@ -37,8 +39,40 @@ class Edge(Base):
     node_to = relationship(Node, foreign_keys=[node_to_id])
     category = relationship(Category)
 
+    def __repr__(self):
+        return "<Edge (%d -> %d) category=%r>"%(self.node_from_id, self.node_to_id, self.category.name)
 
-class NodeProperty(Base):
+
+
+
+class FlexibleValueStorage(object):
+    @classmethod
+    def py_coalesce(*args):
+        for a in args:
+            if a is not None:
+                return a
+
+    @hybrid_property
+    def value(self):
+        return self.py_coalesce(self.value_int, self.value_float, self.value_str)
+
+    @value.expression
+    def value(cls):
+        return func.coalesce(cls.value_int, cls.value_float, cls.value_str)
+
+    @value.setter
+    def value(self, val):
+        if isinstance(val, float):
+            self.value_float = val
+            self.value_int = self.value_str = None
+        elif isinstance(val, int):
+            self.value_int = val
+            self.value_float = self.value_str = None
+        elif isinstance(val, str):
+            self.value_str = val
+            self.value_float = self.value_int = None
+
+class NodeProperty(Base, FlexibleValueStorage):
     __tablename__ = "nodeproperties"
 
     id = Column(Integer, primary_key=True)
@@ -51,14 +85,8 @@ class NodeProperty(Base):
     value_float = Column(Float)
     value_str = Column(String)
 
-    value = composite(FlexibleValue, value_int, value_float, value_str)
 
-    def __init__(self):
-        self.value = FlexibleValue()
-
-
-
-class EdgeProperty(Base):
+class EdgeProperty(Base, FlexibleValueStorage):
     __tablename__ = "edgeproperties"
 
     id = Column(Integer, primary_key=True)
@@ -70,9 +98,6 @@ class EdgeProperty(Base):
     value_int = Column(Integer)
     value_float = Column(Float)
     value_str = Column(String)
-
-    value = composite(FlexibleValue, value_int, value_float, value_str)
-
 
 
 Index("edges_node_from_index", Edge.__table__.c.node_from_id)
