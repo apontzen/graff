@@ -6,26 +6,6 @@ import copy
 from .temptable import TempTableState
 
 
-def add(category_, properties={}):
-    new_node = orm.Node()
-    new_node.category_id = category.get_existing_or_new_id(category_)
-    session = connection.get_session()
-    session.add(new_node)
-    session.flush()
-
-    property_objects = []
-    for k, v in iteritems(properties):
-        prop = orm.NodeProperty()
-        prop.node_id = new_node.id
-        prop.category_id = category.get_existing_or_new_id(k)
-        prop.value = v
-        property_objects.append(prop)
-
-    session.add_all(property_objects)
-
-    session.commit()
-    return new_node
-
 class QueryStructureError(RuntimeError):
     pass
 
@@ -51,10 +31,10 @@ class BaseQuery(object):
     SQL must be performed within the context.
     """
 
-    def __init__(self):
-        session = connection.get_session()
-        self._session = session
-        self._connection = session.connection()
+    def __init__(self, graph_connection):
+        self._graph_connection = graph_connection
+        self._session = graph_connection.get_sqlalchemy_session()
+        self._connection = self._session.connection()
         self._temp_table_state = TempTableState()
 
     def _get_populate_temp_table_statement(self):
@@ -166,10 +146,10 @@ class BaseQuery(object):
 
 class NodeQuery(BaseQuery):
     """Represents a query that returns nodes of a specific category or all categories"""
-    def __init__(self, category_=None):
-        super(NodeQuery, self).__init__()
+    def __init__(self, graph_connection, category_=None):
+        super(NodeQuery, self).__init__(graph_connection)
         if category_:
-            self._category = category.get_id(category_)
+            self._category = self._graph_connection.category_cache.get_id(category_)
         else:
             self._category = None
 
@@ -191,7 +171,7 @@ class NodeQuery(BaseQuery):
 class NodeQueryFromNodeQuery(NodeQuery):
     """Represents a query that returns nodes based on a previous set of nodes in an underlying 'base' query"""
     def __init__(self, base, category_=None):
-        super(NodeQueryFromNodeQuery, self).__init__(category_)
+        super(NodeQueryFromNodeQuery, self).__init__(base._graph_connection, category_)
         self._base = base
         self._copy_columns_source = []
         self._copy_columns_target = []
@@ -272,7 +252,7 @@ class NodeQueryWithValuesForInternalUse(NodeQueryFromNodeQuery):
     def __init__(self, base, *categories):
         super(NodeQueryWithValuesForInternalUse, self).__init__(base)
         self._category_names = categories
-        self._categories = [category.get_id(c) for c in categories]
+        self._categories = [self._graph_connection.category_cache.get_id(c) for c in categories]
         self._tt_column_mapping = {}
         self._tt_columns = []
         for n in self._category_names:
@@ -359,7 +339,3 @@ class NodeFilterNamedPropertiesQuery(NodeQueryWithValuesForInternalUse):
         delete_query = tt.delete().where(tt.c.id.in_(subq))
 
         self._connection.execute(delete_query)
-
-
-def query(*args):
-    return NodeQuery(*args)

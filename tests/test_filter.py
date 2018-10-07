@@ -1,7 +1,9 @@
 import pygraphdb, pygraphdb.node, pygraphdb.edge, pygraphdb.condition as c, pygraphdb.testing as testing
 
+
 def setup():
-    testing.init_ownership_graph()
+    global test_db
+    test_db = testing.init_ownership_graph()
 
 def test_condition_with_value():
     cond = c.Property("price")>500.0
@@ -34,12 +36,12 @@ def test_logic():
 
 
 def test_filter():
-    results = pygraphdb.node.query("thing").filter(c.Property("value")>25.0).with_property("value").all()
+    results = test_db.query_node("thing").filter(c.Property("value")>25.0).with_property("value").all()
     assert len(results)==25
     for node, value in results:
         assert value>25.0
 
-    results = pygraphdb.node.query("person").\
+    results = test_db.query_node("person").\
         filter(c.Property("net_worth")<5000).\
         follow("owns").\
         with_property("price").all()
@@ -49,7 +51,7 @@ def test_filter():
     for node,price in results:
         assert price<100.0
 
-    results = pygraphdb.node.query("thing").filter((c.Property("value") > 25.0) & (c.Property("price")>100)).\
+    results = test_db.query_node("thing").filter((c.Property("value") > 25.0) & (c.Property("price")>100)).\
         with_property("value","price").all()
 
     assert len(results)==14
@@ -58,5 +60,5 @@ def test_filter():
         assert price>100.0
 
 def test_filter_does_not_return_values():
-    results = pygraphdb.node.query("thing").filter(c.Property("value") > 25.0).all()
+    results = test_db.query_node("thing").filter(c.Property("value") > 25.0).all()
     assert isinstance(results[0], pygraphdb.orm.Node)

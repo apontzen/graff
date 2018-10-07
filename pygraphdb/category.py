@@ -1,37 +1,34 @@
 from .orm import Category
-from .connection import get_session
 
 class RaiseException:
     pass
 
 
-_name_ids = None
-def get_id(name, session=None, default=RaiseException):
-    global _name_ids
+class CategoryCache(object):
+    def __init__(self, sqlalchemy_session):
+        self._name_ids = None
+        self._session = sqlalchemy_session
 
-    if session is None:
-        session = get_session()
+    def get_id(self, name, default=RaiseException):
 
-    if _name_ids is None:
-        id_and_name = session.query(Category.id, Category.name).all()
-        _name_ids = {t:i for i,t in id_and_name}
+        if self._name_ids is None:
+            id_and_name = self._session.query(Category.id, Category.name).all()
+            self._name_ids = {t:i for i,t in id_and_name}
 
-    if default is not RaiseException:
-        return _name_ids.get(name, default)
-    else:
-        return _name_ids[name]
+        if default is not RaiseException:
+            return self._name_ids.get(name, default)
+        else:
+            return self._name_ids[name]
 
-def get_existing_or_new_id(name, session=None):
-    if session is None:
-        session = get_session()
+    def get_existing_or_new_id(self, name):
 
-    id_ = get_id(name, session, None)
+        id_ = self.get_id(name, None)
 
-    if id_ is None:
-        new_category = Category()
-        new_category.name = name
-        session.add(new_category)
-        session.flush()
-        id_ = _name_ids[name] = new_category.id
+        if id_ is None:
+            new_category = Category()
+            new_category.name = name
+            self._session.add(new_category)
+            self._session.flush()
+            id_ = self._name_ids[name] = new_category.id
 
-    return id_
+        return id_
