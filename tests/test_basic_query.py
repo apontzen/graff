@@ -13,11 +13,11 @@ def setup():
     ts2_node = test_db.add_node("timestep", {'timestep_name': "ts2"})
     halo2_node = test_db.add_node("halo", {'halo_number': 3})
 
-    test_db.add_edge(sim_node, ts_node, "has_timestep")
-    test_db.add_edge(ts_node, halo_node, "has_halo")
-    test_db.add_edge(sim_node, ts2_node, "has_timestep")
-    test_db.add_edge(ts2_node, halo2_node, "has_halo")
-    test_db.add_edge(halo_node, halo2_node, "is_successor")
+    test_db.add_edge("has_timestep", sim_node, ts_node)
+    test_db.add_edge("has_halo", ts_node, halo_node)
+    test_db.add_edge("has_timestep", sim_node, ts2_node)
+    test_db.add_edge("has_halo", ts2_node, halo2_node)
+    test_db.add_edge("is_successor", halo_node, halo2_node)
 
     global boring_node, boring_node2
     boring_node = test_db.add_node("boring")
