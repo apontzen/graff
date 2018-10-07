@@ -1,11 +1,10 @@
-from . import orm, category, connection, condition
-from sqlalchemy import Table, Column, Integer, ForeignKey, Float, sql
+from . import orm, category, connection
+from sqlalchemy import Table, Column, Integer, ForeignKey, sql
 from sqlalchemy.orm import aliased
 from six import iteritems
-import random
-import string
-from six.moves import range
 import copy
+from .temptable import TempTableState
+
 
 def add(category_, properties={}):
     new_node = orm.Node()
@@ -31,85 +30,156 @@ class QueryStructureError(RuntimeError):
     pass
 
 class BaseQuery(object):
+    """The base class for all graph queries.
+
+    Queries do not perform any actions until one actually requests results using the all() method, gets the first
+    result using first(), or counts them using count().
+
+    For more advanced usage, it is helpful to understand what happens when all(), first() or count() is called.
+
+    First the query is "entered" as a context; this involves creating a temp table in the SQL layer which contains the
+    results. These results can then be retrieved by querying against the temp table. A suitable query is
+    returned by _get_temp_table_query().
+
+    Thus, for example, nodes = q.all() for a basic node query q should be equivalent to:
+
+    with q:
+        tt = q.temp_table()
+        nodes = session.query(orm.Node).select_from(tt).join(orm.Node
+
+    Once the query context exits, the temp table is destroyed. In other words, any manipulation of the temp table within
+    SQL must be performed within the context.
+    """
+
     def __init__(self):
         session = connection.get_session()
         self._session = session
         self._connection = session.connection()
-        self._temp_table = None
+        self._temp_table_state = TempTableState()
 
-    def _create_temp_table(self):
-        rstr = ''.join(random.choice(string.ascii_lowercase) for _ in range(4))
+    def _get_populate_temp_table_statement(self):
+        """Get the SQL statement to insert rows into the temporary table for this query.
 
-        temp_table = Table(
-            'temporary_' + rstr,
-            orm.Base.metadata,
-            *self._get_temp_table_columns(),
-            prefixes=['TEMPORARY']
-        )
+        Called immediately after the temporary table has been created, meaning the query context has just been entered.
 
-        # TODO: add suitable index to temp.temporary_+rstr
-
-        self._temp_table = temp_table
-        self._temp_table_name = "temporary_"+rstr
-        self._temp_table.create(checkfirst=True, bind=self._connection)
-
-    def _destroy_temp_table(self):
-        self._temp_table.drop(checkfirst=True, bind=self._connection)
-        self._temp_table = None
+        The SQL returned by this statement is called immediately. The reason that it returns the query rather than
+        executing it itself is so that child classes can modify the generated statement (rather than have to
+        re-implement it in its entirety)."""
+        raise NotImplementedError("_populate_temp_table needs to be implemented by a subclass")
 
     def _filter_temp_table(self):
+        """Apply any filters to the temporary table for this query.
+
+        Called when entering the query context, just after creating and populating the temporary table."""
         pass
 
     def _get_temp_table_query(self):
-        return self._session.query(orm.Node).select_from(self._temp_table).join(orm.Node)
+        """Get the correct SQL query against the temp table to return appropriate results from this graph query."""
+
+        tt = self._temp_table_state
+
+        assert tt.get_columns()[0].name=="id"
+
+        join_conditions = []
+        query_on = []
+        join_tables = []
+
+        for col in tt.get_columns()[1:]:
+            if col.name.startswith("noreturn"):
+                pass
+            elif col.name.startswith("node_id"):
+                alias = aliased(orm.Node)
+                query_on.append(alias)
+                join_conditions.append(alias.id==col)
+                join_tables.append(alias)
+            elif col.name.startswith("nodeproperty_id"):
+                alias =aliased(orm.NodeProperty)
+                query_on.append(alias.value)
+                join_conditions.append(alias.id==col)
+                join_tables.append(alias)
+            else:
+                raise ValueError("Don't know how to return results from a temptable column named %s"%(col.name))
+
+        q = self._session.query(*query_on).select_from(tt.get_table())
+
+        for table, condition in zip(join_tables,join_conditions):
+            q = q.outerjoin(table, condition)
+            # use outer join so that null IDs translate to null in output, rather than disappearing
+
+        return q
 
     def all(self):
+        """Construct and retrieve all results from this graph query"""
         with self:
             results = self._get_temp_table_query().all()
         return results
 
+    def count(self):
+        """Constructs the query and counts the number of rows in the result"""
+        with self:
+            return self._session.query(self.get_temp_table()).count()
+
+    def first(self):
+        """Constructs the query and returns the first row in the result"""
+        with self:
+            return self._get_temp_table_query().first()
+
     def filter(self, condition):
+        """Return a new graph query that represents the old one filtered by a stated condition"""
         return NodeFilterNamedPropertiesQuery(self, condition)
 
-    def temp_table(self):
-        if self._temp_table is None:
-            raise RuntimeError("Cannot get the temp_table without first entering the query")
-        return self._temp_table
+    def get_temp_table(self):
+        """Return the SQLAlchemy Table for the temp table associated with this query.
 
-    def _populate_temp_table(self):
-        raise NotImplementedError("_populate_temp_table needs to be implemented by a subclass")
+        This method will fail unless you have first entered the query."""
+        return self._temp_table_state.get_table()
+
+    def follow(self, category=None):
+        """Return a query that follows an edge to the next node.
+
+        The edge may fall into a named category; or if None, all possible edges are followed."""
+        return FollowQuery(self, category)
 
     def _get_temp_table_columns(self):
+        """Return a list of columns to be created in the temp table"""
         raise NotImplementedError("_get_temp_table_columns needs to be implemented by a subclass")
 
+    def _get_temp_table_columns_to_carry_forward(self):
+        """Return a list of columns in the temp table that should be propagated into any chained queries.
+
+        For example, this allows the results of with_property(...) to propagate along the query chain"""
+        return []
+
+    def __getitem__(self, item):
+        """Return a reference to a named property in this query, suitable for use in a filter condition"""
+        raise QueryStructureError("This query does not have any named properties to reference")
+
     def __enter__(self):
-        self._create_temp_table()
-        self._populate_temp_table()
+        self._temp_table_state.create(self._session)
+        self._connection.execute(self._get_populate_temp_table_statement())
         self._filter_temp_table()
 
     def __exit__(self, *args):
-        self._destroy_temp_table()
+        return self._temp_table_state.destroy()
 
-    def follow(self, *args):
-        """Return a query that follows an edge to the next node"""
-        return FollowQuery(self, *args)
 
 
 class NodeQuery(BaseQuery):
+    """Represents a query that returns nodes of a specific category or all categories"""
     def __init__(self, category_=None):
+        super(NodeQuery, self).__init__()
         if category_:
             self._category = category.get_id(category_)
         else:
             self._category = None
-        super(NodeQuery, self).__init__()
 
-    def _get_temp_table_columns(self):
-        return [Column('id', Integer, primary_key=True), Column('node_id', Integer, ForeignKey('nodes.id'))]
+        self._temp_table_state.add_column("node_id", Integer, ForeignKey('nodes.id'))
 
-    def _populate_temp_table(self):
+
+    def _get_populate_temp_table_statement(self):
         orm_query = self._session.query(orm.Node.id).filter_by(category_id=self._category)
-        insert_statement = self._temp_table.insert().from_select(['node_id'], orm_query)
-        self._connection.execute(insert_statement)
+        insert_statement = self.get_temp_table().insert().from_select(['node_id'], orm_query)
+        return insert_statement
 
     def with_property(self, *args):
         """Return a query that returns properties"""
@@ -118,135 +188,175 @@ class NodeQuery(BaseQuery):
         else:
             return NodeNamedPropertiesQuery(self, *args)
 
-class FollowQuery(NodeQuery):
+class NodeQueryFromNodeQuery(NodeQuery):
+    """Represents a query that returns nodes based on a previous set of nodes in an underlying 'base' query"""
     def __init__(self, base, category_=None):
-        super(FollowQuery, self).__init__(category_)
+        super(NodeQueryFromNodeQuery, self).__init__(category_)
         self._base = base
+        self._copy_columns_source = []
+        self._copy_columns_target = []
+        for col in base._get_temp_table_columns_to_carry_forward():
+            self._copy_columns_source.append(col)
+            self._copy_columns_target.append(self._temp_table_state.add_column(copy.copy(col)))
 
-    def _populate_temp_table(self):
+    def __enter__(self):
         with self._base:
-            prev_table = self._base.temp_table()
-            query = self._session.query(orm.Edge.node_to_id)\
-                .select_from(prev_table)\
-                .join(orm.Edge,orm.Edge.node_from_id==prev_table.c.node_id)
-            if self._category:
-                query = query.filter(orm.Edge.category_id == self._category)
-            insert_statement = self._temp_table.insert().from_select(["node_id"], query)
-            self._connection.execute(insert_statement)
+            super(NodeQueryFromNodeQuery, self).__enter__()
+
+    def _get_temp_table_columns_to_carry_forward(self):
+        return self._copy_columns_target
+
+    def _get_populate_temp_table_statement(self):
+        orm_query = self._session.query(orm.Node.id *self._copy_columns_source).filter_by(category_id=self._category)
+        insert_statement = self.get_temp_table().insert().from_select(['node_id']+self._copy_columns_target, orm_query)
+        return insert_statement
+
+class FollowQuery(NodeQueryFromNodeQuery):
+    """Represents a query that returns nodes linked by edges to the previous nodes.
+
+    The edges may fall into a particular category, or if no category is specified all edges are followed."""
+
+    def _get_populate_temp_table_statement(self):
+        prev_table = self._base.get_temp_table()
+        query = self._session.query(orm.Edge.node_to_id, *self._copy_columns_source)\
+            .select_from(prev_table)\
+            .join(orm.Edge,orm.Edge.node_from_id==prev_table.c.node_id)
+        if self._category:
+            query = query.filter(orm.Edge.category_id == self._category)
+        insert_statement = self.get_temp_table().insert().from_select(["node_id"]+self._copy_columns_target, query)
+        return insert_statement
 
 
-class NodeAllPropertiesQuery(NodeQuery):
+class NodeAllPropertiesQuery(NodeQueryFromNodeQuery):
+    """Represents a query that returns the underlying nodes, plus all their properties.
 
-    def _get_temp_table_columns(self):
-        return  [Column('id', Integer, primary_key=True),
-                 Column('node_id', Integer, ForeignKey('nodes.id')),
-                 Column('property_id', Integer, ForeignKey('nodeproperties.id'))]
+    The properties are returned as rows, i.e. each row contains the node and one of its properties.
+    Thus the column count is increased by one, but the row count is increased by a number depending on how
+    many properties each node has."""
 
     def __init__(self, base):
-        super(NodeAllPropertiesQuery, self).__init__()
-        self._base = base
+        super(NodeAllPropertiesQuery, self).__init__(base)
+        self._tt_property_column = \
+            self._temp_table_state.add_column_with_unique_name("nodeproperty_id", Integer, ForeignKey('nodeproperties.id'))
 
-    def _populate_temp_table(self):
-        with self._base:
-            prev_table = self._base.temp_table()
-            query = self._session.query(prev_table.c.node_id, orm.NodeProperty.id)\
-                .select_from(prev_table)\
-                .outerjoin(orm.NodeProperty,
-                           (orm.NodeProperty.node_id==prev_table.c.node_id))
+    def _get_populate_temp_table_statement(self):
+        prev_table = self._base.get_temp_table()
+        query = self._session.query(prev_table.c.node_id, orm.NodeProperty.id, *self._copy_columns_source)\
+            .select_from(prev_table)\
+            .outerjoin(orm.NodeProperty,
+                       (orm.NodeProperty.node_id==prev_table.c.node_id))
 
-            insert_statement = self._temp_table.insert().from_select(["node_id", "property_id"], query)
-
-            self._connection.execute(insert_statement)
+        insert_statement = self.get_temp_table().insert().from_select(["node_id", self._tt_property_column]
+                                                                      +self._copy_columns_target, query)
+        return insert_statement
 
     def _get_temp_table_query(self):
-        return self._session.query(orm.Node,orm.NodeProperty.value).select_from(self._temp_table)\
+        return self._session.query(orm.Node,orm.NodeProperty.value).select_from(self.get_temp_table())\
             .outerjoin(orm.NodeProperty)\
-            .join(orm.Node, orm.Node.id==self._temp_table.c.node_id)
+            .join(orm.Node, orm.Node.id == self.get_temp_table().c.node_id)
+
+    def _get_temp_table_columns_to_carry_forward(self):
+        return super(NodeAllPropertiesQuery, self)._get_temp_table_columns_to_carry_forward() + [self._tt_property_column]
 
 
-class NodeQueryWithValuesForInternalUse(NodeQuery):
-    def _get_temp_table_columns(self):
-        cols = [Column('id', Integer, primary_key=True),
-                Column('node_id', Integer, ForeignKey('nodes.id'))]
-        for i in range(len(self._categories)):
-            cols.append(Column('property_id_%d'%i, Integer, ForeignKey('nodeproperties.id')))
-        return cols
+class NodeQueryWithValuesForInternalUse(NodeQueryFromNodeQuery):
+    """Represents a query that returns the underlying nodes and also internally obtains values of the named properties.
+
+    This is a base class for alternative possible uses for the properties. It does not directly expose the results
+    to the user, and therefore is not recommended for direct use. NodeNamedPropertiesQuery is the user-exposed class
+    that actually returns the values of the property, whereas NodeFilterNamedPropertiesQuery instead uses the
+    values to perform a filter on the returned results.
+    """
+    _column_base = "noreturn_nodeproperty_id"
 
     def __init__(self, base, *categories):
-        super(NodeQueryWithValuesForInternalUse, self).__init__()
+        super(NodeQueryWithValuesForInternalUse, self).__init__(base)
         self._category_names = categories
         self._categories = [category.get_id(c) for c in categories]
-        self._base = base
+        self._tt_column_mapping = {}
+        self._tt_columns = []
+        for n in self._category_names:
+            new_col = self._temp_table_state.add_column_with_unique_name(self._column_base,
+                                                                         Integer, ForeignKey('nodeproperties.id'))
+            self._tt_column_mapping[n] = new_col
+            self._tt_columns.append(new_col)
 
     def _get_temp_table_column_mapping(self):
-        return {name: sql.literal_column('property_value_%d'%i) for i, name in enumerate(self._category_names)}
+        return self._tt_column_mapping
 
-    def _populate_temp_table(self):
-        with self._base:
-            prev_table = self._base.temp_table()
-            aliases = []
-            for cid in self._categories:
-                aliases+=[aliased(orm.NodeProperty)]
+    def _get_populate_temp_table_statement(self):
+        prev_table = self._base.get_temp_table()
+        aliases = []
+        for cid in self._categories:
+            aliases+=[aliased(orm.NodeProperty)]
 
-            query = self._session.query(prev_table.c.node_id, *[a.id for a in aliases]) \
-                .select_from(prev_table)
+        query = self._session.query(prev_table.c.node_id, *(self._copy_columns_source + [a.id for a in aliases])) \
+            .select_from(prev_table)
 
-            for column, cid in zip(aliases, self._categories):
-                query = query.outerjoin(column,
-                           (column.node_id == prev_table.c.node_id) & (
-                            column.category_id==cid))
+        for column, cid in zip(aliases, self._categories):
+            query = query.outerjoin(column,
+                       (column.node_id == prev_table.c.node_id) & (
+                        column.category_id==cid))
 
-            insert_cols = ["node_id"] + ["property_id_%d"%i for i in range(len(self._categories))]
-            insert_statement = self._temp_table.insert().from_select(insert_cols, query)
+        insert_cols = ["node_id"] + self._copy_columns_target + self._tt_columns
+        insert_statement = self.get_temp_table().insert().from_select(insert_cols, query)
 
-            self._connection.execute(insert_statement)
-
+        return insert_statement
 
 
 class NodeNamedPropertiesQuery(NodeQueryWithValuesForInternalUse):
-    def _get_temp_table_query(self):
+    """Represents a query that returns the underlying nodes, plus named properties of those nodes.
 
-        aliases = []
-        for cid in self._categories:
-            aliases += [aliased(orm.NodeProperty)]
+    The properties are returned as columns, i.e. each named category generates a column that in turn has the
+    value of the node's property. The row count is unchanged from the underlying query."""
 
-        q = self._session.query(orm.Node,*[a.value.label("property_value_%d"%i) for i,a in enumerate(aliases)]).select_from(self._temp_table)
+    _column_base = "nodeproperty_id"
 
-        for i, alias in enumerate(aliases):
-            q = q.outerjoin(alias, alias.id==getattr(self._temp_table.c, "property_id_%d"%i))
+    def __getitem__(self, item):
+        from . import condition
+        sql_column = self._get_temp_table_column_mapping()[item]
+        sql_column_in_future_table = sql.literal_column(sql_column.name)
+        return condition.BoundProperty(item, sql_column_in_future_table)
 
-        q = q.join(orm.Node, orm.Node.id==self._temp_table.c.node_id)
+    def _get_temp_table_columns_to_carry_forward(self):
+        return super(NodeNamedPropertiesQuery, self)._get_temp_table_columns_to_carry_forward() + self._tt_columns
 
-        return q
-
-    def with_property(self, *args):
-        raise QueryStructureError("with_property(...) should be the last clause of a query construction")
 
 class NodeFilterNamedPropertiesQuery(NodeQueryWithValuesForInternalUse):
+    """Represents a query that returns the underlying nodes, filtered by a condition that relies on named properties.
+
+    Note that the properties are not returned to the user."""
     def __init__(self, base, cond):
         self._condition = cond
-        categories = cond.requires_properties()
+        categories = cond.get_unresolved_property_names()
         super(NodeFilterNamedPropertiesQuery, self).__init__(base, *categories)
 
     def _filter_temp_table(self):
         # in principle it would be neater to use a joined delete here, but sqlite doesn't support it
         # so we construct a subquery to figure out what to delete instead
 
+        tt = self.get_temp_table()
 
-        subq = self._session.query(self._temp_table.c.id)
+        subq = self._session.query(tt.c.id)
 
-        val_map = {}
+        value_map = {}
 
-        for i, category_name in enumerate(self._category_names):
+        for col, category_name in zip(self._tt_columns, self._category_names):
             alias = aliased(orm.NodeProperty)
-            subq = subq.outerjoin(alias, alias.id == getattr(self._temp_table.c, "property_id_%d" % i))
-            val_map[category_name] = alias.value # this joined property should be used as the value in the condition we're evaluating
+            subq = subq.outerjoin(alias, alias.id == col)
+            value_map[category_name] = alias.value # this joined property should be used as the value in the condition we're evaluating
 
-        self._condition.assign_sql_columns(val_map)
+        for id_column in self._condition.get_resolved_property_id_columns():
+            alias = aliased(orm.NodeProperty)
+            subq = subq.outerjoin(alias, alias.id == id_column)
+            value_map[id_column] = alias.value  # this joined property should be used as the value in the condition we're evaluating
+
+        self._condition.assign_sql_columns(value_map)
+
         delete_condition = ~(self._condition.to_sql()) # delete what we don't want to keep
         subq = subq.filter(delete_condition).subquery() # This subquery now identifies the IDs we don't want to keep
 
-        delete_query = self._temp_table.delete().where(self._temp_table.c.id.in_(subq))
+        delete_query = tt.delete().where(tt.c.id.in_(subq))
 
         self._connection.execute(delete_query)
 

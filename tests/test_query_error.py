@@ -12,4 +12,4 @@ def setup():
 
 def test_query_error():
     with assert_raises(node.QueryStructureError):
-        node.query("simulation").with_property("simulation").with_property("simulation")
+        node.query("simulation")["anything"]

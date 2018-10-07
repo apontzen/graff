@@ -1,31 +1,23 @@
-import pygraphdb, pygraphdb.node, pygraphdb.edge, pygraphdb.condition as c
+import pygraphdb, pygraphdb.node, pygraphdb.edge, pygraphdb.condition as c, pygraphdb.testing as testing
 
 def setup():
-    global sim_node, ts_node, ts2_node, halo_node, halo2_node
-    pygraphdb.initialize("")
-
-    person_node1 = pygraphdb.node.add("person", {"net_worth": 1000})
-    person_node2 = pygraphdb.node.add("person", {"net_worth": 10000})
-
-    for i in range(50):
-        thing_node = pygraphdb.node.add("thing", {"price": float(i) * 10.0, "value": float(50-i)})
-        pygraphdb.edge.add(person_node2, thing_node, "owns")
-        if i<10:
-            pygraphdb.edge.add(person_node1, thing_node, "owns")
+    testing.init_ownership_graph()
 
 def test_condition_with_value():
     cond = c.Property("price")>500.0
-    assert cond.requires_properties()=={"price"}
+    assert cond.get_unresolved_property_names() == {"price"}
     assert str(cond.to_sql())=="column_price > :param_1"
     assert cond.to_sql().compile().params["param_1"]==500.0
 
 def test_conditions():
-    conditions = "__lt__", "__gt__", "__eq__", "__ne__", "__le__", "__ge__"
-    sql_conditions = "<", ">", "=", "!=", "<=", ">="
+    conditions = "__lt__", "__gt__", "__eq__", "__ne__", "__le__", "__ge__", \
+                 "__add__", "__sub__", "__mul__", "__truediv__"
+    sql_conditions = "<", ">", "=", "!=", "<=", ">=", \
+                     "+", "-", "*", "/"
 
     for cond, sqlcond in zip(conditions, sql_conditions):
         cond = getattr(c.Property("price"), cond)(c.Property("value"))
-        assert cond.requires_properties() == {"price", "value"}
+        assert cond.get_unresolved_property_names() == {"price", "value"}
         assert str(cond.to_sql())=="column_price %s column_value"%sqlcond
 
 def test_logic():
@@ -38,7 +30,7 @@ def test_logic():
     or_greater = (c.Property("price") > c.Property("value")) | (c.Property("price") > 200.0)
     assert str(or_greater.to_sql()) == "column_price > column_value OR column_price > :param_1"
 
-    assert or_greater.requires_properties()=={"price","value"}
+    assert or_greater.get_unresolved_property_names() == {"price", "value"}
 
 
 def test_filter():

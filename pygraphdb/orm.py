@@ -24,7 +24,10 @@ class Node(Base):
     category = relationship(Category)
 
     def __repr__(self):
-        return "<Node id=%d category=%r>"%(self.id, self.category.name)
+        if self.category is not None:
+            return "<Node id=%d category=%r>"%(self.id, self.category.name)
+        else:
+            return "<Node id=%d category=???>"
 
 
 class Edge(Base):
