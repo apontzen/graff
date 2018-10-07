@@ -1,6 +1,6 @@
 import re
 from . import orm
-from sqlalchemy import Table, Column, Integer, ForeignKey, sql
+from sqlalchemy import Table, Column, Integer, Index, ForeignKey, sql
 from sqlalchemy.orm import Session
 
 class TempTableStateError(RuntimeError):
@@ -80,10 +80,11 @@ class TempTableState(object):
             prefixes=['TEMPORARY']
         )
 
-        # TODO: add suitable index to the table just generated
 
         self._temp_table = temp_table
+        self._table_index = Index('temp.index_' + temp_table.name, self.get_columns()[1])
         self._temp_table.create(checkfirst=True, bind=self._connection)
+
 
         self._active = True
 
@@ -95,8 +96,9 @@ class TempTableState(object):
     def destroy(self):
         """Destroy the temporary table and return the schema to being mutable."""
         self._assert_active()
+        self._table_index.drop(bind=self._connection)
         self._temp_table.drop(checkfirst=True, bind=self._connection)
-        # TODO: drop index
+
         orm.Base.metadata.remove(self._temp_table)
 
         self._temp_table = None

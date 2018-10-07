@@ -105,5 +105,7 @@ class EdgeProperty(Base, FlexibleValueStorage):
 
 Index("edges_node_from_index", Edge.__table__.c.node_from_id)
 Index("edges_node_to_index", Edge.__table__.c.node_to_id)
+Index("node_index", Node.__table__.c.id)
+Index("edge_index", Edge.__table__.c.id)
 Index("nodeproperties_node_index", NodeProperty.__table__.c.node_id)
 Index("edgeproperties_edge_index", EdgeProperty.__table__.c.edge_id)
