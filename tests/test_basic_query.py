@@ -1,10 +1,10 @@
-import pygraphdb, pygraphdb.category, pygraphdb.node, pygraphdb.edge
+import graff, graff.category, graff.node, graff.edge
 
 
 
 def setup():
     global sim_node, ts_node, ts2_node, halo_node, halo2_node, test_db
-    test_db = pygraphdb.Connection()
+    test_db = graff.Connection()
 
     sim_node = test_db.add_node("simulation")
     ts_node = test_db.add_node("timestep", {'timestep_name': "ts1"})

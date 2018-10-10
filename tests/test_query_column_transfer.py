@@ -1,4 +1,4 @@
-import pygraphdb, pygraphdb.node as n, pygraphdb.edge, pygraphdb.condition as c, pygraphdb.testing as testing
+import graff, graff.node as n, graff.edge, graff.condition as c, graff.testing as testing
 
 def setup():
     global test_db

@@ -1,11 +1,11 @@
 from nose.tools import assert_raises
-from pygraphdb import node
-import pygraphdb
+from graff import node
+import graff
 
 
 def setup():
     global testdb
-    testdb = pygraphdb.Connection()
+    testdb = graff.Connection()
     sim_node = testdb.add_node("simulation")
 
 

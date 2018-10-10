@@ -1,4 +1,4 @@
-from pygraphdb import temptable
+from graff import temptable
 from sqlalchemy import Integer
 
 def test_column_adding():

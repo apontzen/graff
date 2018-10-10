@@ -1,5 +1,5 @@
-import pygraphdb
-from pygraphdb import testing
+import graff
+from graff import testing
 
 def setup():
     global db

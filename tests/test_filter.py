@@ -1,4 +1,4 @@
-import pygraphdb, pygraphdb.node, pygraphdb.edge, pygraphdb.condition as c, pygraphdb.testing as testing
+import graff, graff.node, graff.edge, graff.condition as c, graff.testing as testing
 
 
 def setup():
@@ -61,4 +61,4 @@ def test_filter():
 
 def test_filter_does_not_return_values():
     results = test_db.query_node("thing").filter(c.Property("value") > 25.0).all()
-    assert isinstance(results[0], pygraphdb.orm.Node)
+    assert isinstance(results[0], graff.orm.Node)

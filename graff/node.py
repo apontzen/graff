@@ -92,7 +92,7 @@ class BaseQuery(object):
         """Construct and retrieve all results from this graph query"""
         with self:
             results = self._get_temp_table_query().all()
-        results = [r[1:] for r in results] # remove temp-table ID column
+        results = [r[1:] if len(r)>2 else r[1] for r in results] # remove temp-table ID column
         return results
 
     def count(self):
@@ -258,11 +258,6 @@ class NodeAllPropertiesQuery(NodeQueryFromNodeQuery):
         insert_statement = self.get_temp_table().insert().from_select(["node_id", self._tt_property_column]
                                                                       +self._copy_columns_target, query)
         return insert_statement
-
-    def _get_temp_table_query(self):
-        return self._session.query(orm.Node,orm.NodeProperty.value).select_from(self.get_temp_table())\
-            .outerjoin(orm.NodeProperty)\
-            .join(orm.Node, orm.Node.id == self.get_temp_table().c.node_id)
 
     def _get_temp_table_columns_to_carry_forward(self):
         return super(NodeAllPropertiesQuery, self)._get_temp_table_columns_to_carry_forward() + [self._tt_property_column]
