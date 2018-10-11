@@ -1,6 +1,5 @@
 from .orm import Base, Node, NodeProperty, Edge
-from . import node
-from . import category
+from . import node, value_mapping, category
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from six import iteritems
@@ -39,7 +38,24 @@ class Connection(object):
         :return: the new node
         :rtype: Node
         """
-        return self.add_nodes(category, 1, [properties])[0]
+        new_node = Node()
+        new_node.category_id = self.category_cache.get_existing_or_new_id(category)
+        session = self.get_sqlalchemy_session()
+        session.add(new_node)
+        session.flush()
+
+        property_objects = []
+        for k, v in iteritems(properties):
+            prop = NodeProperty()
+            prop.node_id = new_node.id
+            prop.category_id = self.category_cache.get_existing_or_new_id(k)
+            prop.value = v
+            property_objects.append(prop)
+
+        session.add_all(property_objects)
+
+        session.commit()
+        return new_node
 
     def add_nodes(self, category, number, properties=None):
         """Add multiple nodes of the specified category.
@@ -52,30 +68,44 @@ class Connection(object):
         :param properties - a list of property dictionaries to populate the new nodes; len(properties)=number
         :type properties: list[dict]
 
-        :return: A list of the new nodes
-        :rtype: list[Node]
         """
         session = self.get_sqlalchemy_session()
 
         category_id = self.category_cache.get_existing_or_new_id(category)
-        new_nodes = [Node(category_id=category_id) for i in range(number)]
-        session.add_all(new_nodes)
-        session.flush()
+        first_node_id = session.query(Node.id).order_by(Node.id.desc()).first()
+        if first_node_id is None:
+            first_node_id=1
+        else:
+            first_node_id=first_node_id[0]+1
+        session.bulk_insert_mappings(
+            Node,
+            [{'category_id': category_id}]*number
+        )
 
         if properties is not None:
             if len(properties)!=number:
                 raise ValueError("Incorrect number of property dictionaries passed to add_nodes")
-            property_objects = []
-            for node, props in zip(new_nodes, properties):
+            property_object_mappings = []
+            for i, props in enumerate(properties):
                 for category, value in iteritems(props):
                     category_id = self.category_cache.get_existing_or_new_id(category)
-                    property_objects.append(NodeProperty(node_id = node.id, category_id=category_id, value=value))
-            session.add_all(property_objects)
+                    dict_this_property = {'node_id': first_node_id+i, 'category_id': category_id}
+                    value_mapping.flexible_set_value(dict_this_property, value, attr=False, null_others=False)
+                    property_object_mappings.append(dict_this_property)
+            session.bulk_insert_mappings(NodeProperty, property_object_mappings)
         session.commit()
-        return new_nodes
 
     def add_edge(self, category, node_from, node_to):
-        return self.add_edges(category, [(node_from, node_to)])[0]
+        session = self.get_sqlalchemy_session()
+        category_id = self.category_cache.get_existing_or_new_id(category)
+        if isinstance(node_from,Node):
+            node_from = node_from.id
+        if isinstance(node_to, Node):
+            node_to = node_to.id
+        edge = Edge(category_id = category_id, node_from_id=node_from, node_to_id=node_to)
+        session.add(edge)
+        session.commit()
+        return edge
 
     def add_edges(self, category, mapping_pairs):
         """Add multiple edges between the specified nodes.
@@ -94,8 +124,13 @@ class Connection(object):
         category_id = self.category_cache.get_existing_or_new_id(category)
         edges = []
         for a,b in mapping_pairs:
-            edges.append(Edge(node_from=a, node_to=b, category_id=category_id))
-        session.add_all(edges)
+            if isinstance(a, Node):
+                a = a.id
+            if isinstance(b, Node):
+                b = b.id
+            edges.append({'category_id': category_id, 'node_from_id': a, 'node_to_id': b})
+
+        session.bulk_insert_mappings(Edge, edges)
+
         session.commit()
-        return edges
 

@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, Float, String, ForeignKey, Index, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, composite
 from sqlalchemy.ext.hybrid import hybrid_property
+from . import value_mapping
 
 Base = declarative_base()
 
@@ -65,15 +66,7 @@ class FlexibleValueStorage(object):
 
     @value.setter
     def value(self, val):
-        if isinstance(val, float):
-            self.value_float = val
-            self.value_int = self.value_str = None
-        elif isinstance(val, int):
-            self.value_int = val
-            self.value_float = self.value_str = None
-        elif isinstance(val, str):
-            self.value_str = val
-            self.value_float = self.value_int = None
+        value_mapping.flexible_set_value(self, val)
 
 class NodeProperty(Base, FlexibleValueStorage):
     __tablename__ = "nodeproperties"
