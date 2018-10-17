@@ -1,4 +1,4 @@
-import graff, graff.category, graff.node, graff.edge
+import graff, graff.category
 
 
 
@@ -39,24 +39,35 @@ def test_follow():
 def test_follow_no_category():
     assert test_db.query_node("timestep").follow().follow().all() == [halo2_node]
 
-def test_with_property():
-    assert test_db.query_node("timestep").with_property("timestep_name").all() == [(ts_node, "ts1"), (ts2_node, "ts2")]
-    assert test_db.query_node("timestep").with_property().all() == [(ts_node, "ts1"), (ts2_node, "ts2")]
+def test_return_property():
+    assert test_db.query_node("timestep").return_property("timestep_name").all() == ["ts1", "ts2"]
 
-def test_with_property_no_results():
+def test_return_properties():
+    assert test_db.query_node("timestep").return_properties().all() == ["ts1", "ts2"]
+
+def test_return_this_and_property():
+    assert test_db.query_node("timestep").return_this().return_property("timestep_name").all() == [(ts_node, "ts1"), (ts2_node, "ts2")]
+
+def test_return_this_and_properties():
+    assert test_db.query_node("timestep").return_this().return_properties().all() == [(ts_node, "ts1"), (ts2_node, "ts2")]
+
+def test_return_property_no_results():
     # no results with this name, but would be other results
-    assert test_db.query_node("timestep").with_property("has_halo").all() == [(ts_node, None), (ts2_node, None)]
+    assert test_db.query_node("timestep").return_this().return_property("has_halo").all() == [(ts_node, None), (ts2_node, None)]
+    assert test_db.query_node("timestep").return_property("has_halo").all() == [None, None]
 
     # no results at all, with any name
-    assert test_db.query_node("boring").with_property("has_halo").all() == [(boring_node, None), (boring_node2, None)]
-    assert test_db.query_node("boring").with_property().all() == [(boring_node, None), (boring_node2, None)]
+    assert test_db.query_node("boring").return_this().return_property("has_halo").all() == [(boring_node, None), (boring_node2, None)]
 
-def test_with_property_multiple_unnamed_results():
-    results = test_db.query_node("multipropertynode").with_property().all()
+def test_return_properties_no_results():
+    assert test_db.query_node("boring").return_this().return_properties().all() == [(boring_node, None), (boring_node2, None)]
+
+def test_return_property_multiple_unnamed_results():
+    results = test_db.query_node("multipropertynode").return_this().return_properties().all()
     expected = [(multiproperty_node,1), (multiproperty_node,"two")]
     assert (results == expected) or (results == expected[:-1])
 
-def test_with_property_multiple_named_results():
-    results = test_db.query_node("multipropertynode").with_property("property2","property1").all()
+def test_return_property_multiple_named_results():
+    results = test_db.query_node("multipropertynode").return_this().return_property("property2","property1").all()
     expected = [(multiproperty_node,"two",1)]
     assert results==expected

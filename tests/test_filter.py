@@ -1,4 +1,4 @@
-import graff, graff.node, graff.edge, graff.condition as c, graff.testing as testing
+import graff, graff.condition as c, graff.testing as testing
 
 
 def setup():
@@ -36,7 +36,7 @@ def test_logic():
 
 
 def test_filter():
-    results = test_db.query_node("thing").filter(c.Property("value")>25.0).with_property("value").all()
+    results = test_db.query_node("thing").return_this().filter(c.Property("value")>25.0).return_property("value").all()
     assert len(results)==25
     for node, value in results:
         assert value>25.0
@@ -44,18 +44,18 @@ def test_filter():
     results = test_db.query_node("person").\
         filter(c.Property("net_worth")<5000).\
         follow("owns").\
-        with_property("price").all()
+        return_property("price").all()
 
     assert len(results)==10
 
-    for node,price in results:
+    for price in results:
         assert price<100.0
 
     results = test_db.query_node("thing").filter((c.Property("value") > 25.0) & (c.Property("price")>100)).\
-        with_property("value","price").all()
+        return_property("value","price").all()
 
     assert len(results)==14
-    for node, value, price in results:
+    for value, price in results:
         assert value>25.0
         assert price>100.0
 

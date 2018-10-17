@@ -71,6 +71,7 @@ class Condition(object):
 
 
 class Property(Condition):
+    """Represents a named property, which will be evaluated relative to the """
     def __init__(self, name):
         self._name = name
         self._sql_column = sql.literal_column("column_" + name)
@@ -85,6 +86,7 @@ class Property(Condition):
         return self._sql_column
 
 class BoundProperty(Condition):
+    """Represents a property tied to a specific column in a temporary table"""
     def __init__(self, name, sql_id_column):
         self._name = name
         self._sql_id_column = sql_id_column

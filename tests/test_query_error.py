@@ -1,5 +1,4 @@
 from nose.tools import assert_raises
-from graff import node
 import graff
 
 
@@ -10,5 +9,5 @@ def setup():
 
 
 def test_query_error():
-    with assert_raises(node.QueryStructureError):
+    with assert_raises(graff.query.base.QueryStructureError):
         testdb.query_node("simulation")["anything"]

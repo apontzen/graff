@@ -1,4 +1,4 @@
-from . import connection, node, edge
+from . import connection
 import random
 import sys
 def init_ownership_graph():
@@ -18,12 +18,12 @@ def init_ownership_graph():
 
 def init_friends_network(n_people=1000, n_connections=10000):
     rng = random.Random(1)
-    con = connection.Connection()
+    con = connection.Connection(verbose=True)
 
-    people = con.add_nodes("person",n_people)
+    people = con.add_nodes("person", n_people)
 
-    people_from = [rng.randint(1,n_people) for i in range(n_connections)]
-    people_to = [rng.randint(1,n_people) for i in range(n_connections)]
+    people_from = rng.choices(range(n_people), k=n_connections)
+    people_to = rng.choices(range(n_people), k=n_connections)
     connections = zip(people_from, people_to)
 
     con.add_edges("likes", connections)

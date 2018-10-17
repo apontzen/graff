@@ -1,17 +1,17 @@
-# griphin
-_Griphin_ is a graph database for python, implemented on top of [sqlalchemy](http://www.sqlalchemy.org) for 
+# graff
+_Graff_ is a graph database for python, implemented using [sqlalchemy](http://www.sqlalchemy.org) for 
 compatibility with a wide range of database storage engines. It is also inspired by sqlalchemy in the way it
 allows queries to be built generatively. But for most uses, the user does not need to have knowledge of
 either SQL or sqlalchemy. 
 
-_Griphin_ evolved from the [tangos](pynbody.github.io/tangos) database project for cosmological simulations.
+_Graff_ evolved from the [tangos](pynbody.github.io/tangos) database project for cosmological simulations.
 
 # Usage examples
 
 Initialise a graph database in RAM:
 
 ```python
-mydb= griphin.Connection()
+mydb= graff.Connection()
 ```
 
 Get all nodes of a specified type:

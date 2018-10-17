@@ -1,5 +1,6 @@
 from .orm import Base, Node, NodeProperty, Edge
-from . import node, value_mapping, category
+from . import query
+from . import category, value_mapping
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from six import iteritems
@@ -24,7 +25,7 @@ class Connection(object):
 
     def query_node(self, *args):
         """Returns a query for nodes, optionally of a given category"""
-        return node.NodeQuery(self,*args)
+        return query.node.NodeQuery(self, *args)
 
     def add_node(self, category, properties={}):
         """Add a node of the specified category
