@@ -14,20 +14,34 @@ Initialise a graph database in RAM:
 mydb= graff.Connection()
 ```
 
-Get all nodes of a specified type:
+Initialise a graph database in RAM and populate it with a random network of
+people and friend relationships
+```python
+mydb = graff.testing.init_friends_network(n_people=10, n_connections=100)
+```
+
+Get the 'nodes' corresponding to all people:
 
 ```python
-nodes = mydb.query_nodes("person").all()
+nodes = mydb.query_node("person").all()
+```
+
+Get the names of all people:
+
+```python
+names = mydb.query_node("person").return_property("name").all()
 ```
 
 Count the number of friends-of-friends connections:
 ```python
-count = mydb.query_nodes("person").follow("friend").follow("friend").count()
+count = mydb.query_node("person").follow("likes").follow("likes").count()
 ```
 
-Print all friends-of-friends:
+Get the names of all friends-of-friends, and print the first 100 pairs:
 ```python
-fof = mydb.query_nodes("person").with_property("name").follow("friend").follow("friend").with_property("name").all()
-for name_a, name_b in fof:
+fof = mydb.query_node("person").return_property("name").\
+                                follow("likes").follow("likes").\
+                                return_property("name").all()
+for name_a, name_b in fof[:100]:
     print(name_b, "is a friend of a friend of", name_a)
 ```

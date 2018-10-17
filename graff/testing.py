@@ -3,7 +3,7 @@ import random
 import sys
 def init_ownership_graph():
 
-    con = connection.Connection("")
+    con = connection.Connection()
 
     person_node1 = con.add_node("person", {"net_worth": 1000, "name": "John McGregor"})
     person_node2 = con.add_node("person", {"net_worth": 10000, "name": "Sir Richard Stiltington"})
@@ -16,15 +16,30 @@ def init_ownership_graph():
 
     return con
 
+some_names = ['Aarhus', 'Aeneid', 'Aldrich', 'Amelia', 'Anita', 'Ares', 'Atalanta', 'Babcock', 'Barnet', 'Beirut',
+              'Berlioz', 'Birgit', 'Bonaventure', 'Brazzaville', 'Brunhilde', 'Buxton', 'Canberra', 'Cartesian',
+              'Chang', 'Chou', 'Clifton', 'Conner', 'Creole', 'Dade', 'Daytona', 'Diana', 'Dooley', 'Dunlop', 'Edwin',
+              'Ely', 'Eros', 'Ezra', 'Fiji', 'Francine', 'Fulton', 'Gaussian', 'Gilligan', 'Gorton', 'Guilford',
+              'Hammond', 'Hausdorff', 'Heraclitus', 'Hinman', 'Horatio', 'Ibn', 'Irvin', 'Jamaica', 'Joanna',
+              'Jugoslavia', 'Kathleen', 'Kikuyu', 'Koran', 'Langmuir', 'Leila', 'Lincoln', 'London', 'Luxembourg',
+              'Magnuson', 'Marcy', 'Matisse', 'McElroy', 'Melcher', 'Midas', 'Moines', 'Morrill', 'Nagoya', 'Nero',
+              'Nordstrom', 'Ojibwa', 'Osgood', 'Pareto', 'Peggy', 'Phipps', 'Poland', 'Prokofieff', 'Rae', 'Reub',
+              'Rodriguez', 'Runge', 'Sancho', 'Schlesinger', 'Selkirk', 'Shenandoah', 'Sinbad', 'Sorenson', 'Steiner',
+              'Sutton', 'Tasmania', 'Thomson', 'Transylvania', 'Ulster', 'Venusian', 'Waals', 'Weinberg', 'Wilkinson',
+              'Wylie', 'Zen']
+
 def init_friends_network(n_people=1000, n_connections=10000):
     rng = random.Random(1)
-    con = connection.Connection(verbose=True)
+    con = connection.Connection()
 
-    people = con.add_nodes("person", n_people)
-
-    people_from = rng.choices(range(n_people), k=n_connections)
-    people_to = rng.choices(range(n_people), k=n_connections)
+    people_from = rng.choices(range(1,n_people+1), k=n_connections)
+    people_to = rng.choices(range(1,n_people+1), k=n_connections)
     connections = zip(people_from, people_to)
 
+    people_firstname = rng.choices(some_names, k=n_people)
+    people_lastname = rng.choices(some_names, k=n_people)
+    people_name = ["%s %s"%(f,l) for f,l in zip(people_firstname, people_lastname)]
+
+    con.add_nodes("person", n_people, [{'name': pn} for pn in people_name])
     con.add_edges("likes", connections)
     return con
