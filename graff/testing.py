@@ -43,3 +43,8 @@ def init_friends_network(n_people=1000, n_connections=10000):
     con.add_nodes("person", n_people, [{'name': pn} for pn in people_name])
     con.add_edges("likes", connections)
     return con
+
+def assert_edge_connections(edges_list, pairs_list):
+    """Assert that the list of Edge objects connects the nodes with IDs specified in the pairs_list"""
+    for e, (from_id, to_id) in zip(edges_list, pairs_list):
+        assert e.node_from_id==from_id and e.node_to_id==to_id

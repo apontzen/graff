@@ -3,14 +3,16 @@ import graff, graff.category
 
 
 def setup():
-    global sim_node, ts_node, ts2_node, halo_node, halo2_node, test_db
+    global sim_node, ts_node, ts2_node, halo_node, halo2_node, test_db, props_for_ts_node, props_for_ts2_node
     test_db = graff.Connection()
 
     sim_node = test_db.add_node("simulation")
-    ts_node = test_db.add_node("timestep", {'timestep_name': "ts1"})
+    props_for_ts_node = {'timestep_name': "ts1", 'dummy_property_1': "dp1 for ts1", "dummy_property_2": "dp2 for ts1"}
+    ts_node = test_db.add_node("timestep", props_for_ts_node)
     halo_node = test_db.add_node("halo", {'halo_number': 2})
 
-    ts2_node = test_db.add_node("timestep", {'timestep_name': "ts2"})
+    props_for_ts2_node = {'timestep_name': "ts2", "dummy_property_1": "dp1 for ts2"}
+    ts2_node = test_db.add_node("timestep", props_for_ts2_node)
     halo2_node = test_db.add_node("halo", {'halo_number': 3})
 
     test_db.add_edge("has_timestep", sim_node, ts_node)
@@ -43,13 +45,17 @@ def test_return_property():
     assert test_db.query_node("timestep").return_property("timestep_name").all() == ["ts1", "ts2"]
 
 def test_return_properties():
-    assert test_db.query_node("timestep").return_properties().all() == ["ts1", "ts2"]
+    x = test_db.query_node("timestep").return_properties().all()
+    assert x == [props_for_ts_node, props_for_ts2_node]
+
+def test_return_this():
+    assert test_db.query_node("timestep").return_this().all() == [ts_node, ts2_node]
 
 def test_return_this_and_property():
     assert test_db.query_node("timestep").return_this().return_property("timestep_name").all() == [(ts_node, "ts1"), (ts2_node, "ts2")]
 
 def test_return_this_and_properties():
-    assert test_db.query_node("timestep").return_this().return_properties().all() == [(ts_node, "ts1"), (ts2_node, "ts2")]
+    assert test_db.query_node("timestep").return_this().return_properties().all() == [(ts_node, props_for_ts_node), (ts2_node, props_for_ts2_node)]
 
 def test_return_property_no_results():
     # no results with this name, but would be other results
@@ -60,12 +66,7 @@ def test_return_property_no_results():
     assert test_db.query_node("boring").return_this().return_property("has_halo").all() == [(boring_node, None), (boring_node2, None)]
 
 def test_return_properties_no_results():
-    assert test_db.query_node("boring").return_this().return_properties().all() == [(boring_node, None), (boring_node2, None)]
-
-def test_return_property_multiple_unnamed_results():
-    results = test_db.query_node("multipropertynode").return_this().return_properties().all()
-    expected = [(multiproperty_node,1), (multiproperty_node,"two")]
-    assert (results == expected) or (results == expected[:-1])
+    assert test_db.query_node("boring").return_this().return_properties().all() == [(boring_node, {}), (boring_node2, {})]
 
 def test_return_property_multiple_named_results():
     results = test_db.query_node("multipropertynode").return_this().return_property("property2","property1").all()

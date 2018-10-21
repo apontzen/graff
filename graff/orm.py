@@ -14,10 +14,14 @@ class Category(Base):
     name = Column(String, unique=True)
 
     def __repr__(self):
-        return "<Category %r>"%self.text
+        return "<Category %r>"%self.name
 
+class SupportsCastToDict(object):
+    def __iter__(self):
+        for property_item in self.properties:
+            yield property_item.category.name, property_item.value
 
-class Node(Base):
+class Node(Base, SupportsCastToDict):
     __tablename__ = "nodes"
 
     id = Column(Integer, primary_key=True)
@@ -31,7 +35,7 @@ class Node(Base):
             return "<Node id=%d category=???>"
 
 
-class Edge(Base):
+class Edge(Base, SupportsCastToDict):
     __tablename__ = "edges"
 
     id = Column(Integer, primary_key=True)
@@ -51,7 +55,7 @@ class Edge(Base):
 
 class FlexibleValueStorage(object):
     @classmethod
-    def py_coalesce(*args):
+    def py_coalesce(cls, *args):
         for a in args:
             if a is not None:
                 return a
@@ -72,10 +76,10 @@ class NodeProperty(Base, FlexibleValueStorage):
     __tablename__ = "nodeproperties"
 
     id = Column(Integer, primary_key=True)
-    node_id = Column(Integer, ForeignKey("nodes.id"))
-    node = relationship(Node)
-    category_id = Column(Integer, ForeignKey("categories.id"))
-    category = relationship(Category)
+    node_id = Column(Integer, ForeignKey("nodes.id"), nullable=False)
+    node = relationship(Node, backref='properties', innerjoin=True)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+    category = relationship(Category, innerjoin=True)
 
     value_int = Column(Integer)
     value_float = Column(Float)
@@ -87,7 +91,7 @@ class EdgeProperty(Base, FlexibleValueStorage):
 
     id = Column(Integer, primary_key=True)
     edge_id = Column(Integer, ForeignKey("edges.id"))
-    edge = relationship(Edge)
+    edge = relationship(Edge, backref='properties', innerjoin=True)
     category_id = Column(Integer, ForeignKey("categories.id"))
     category = relationship(Category)
 

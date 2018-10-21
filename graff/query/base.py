@@ -71,6 +71,9 @@ class BaseQuery(object):
         """Construct and retrieve all results from this graph query"""
         with self:
             results = self._get_temp_table_query().all()
+
+        results = self._temp_table_state.postprocess_results(results)
+
         results = list(map(self._reformat_results_row, results))
         return results
 
@@ -113,3 +116,7 @@ class BaseQuery(object):
 
     def __exit__(self, *args):
         return self._temp_table_state.destroy()
+
+    @staticmethod
+    def _null_query_callback(column):
+        return None, None, None

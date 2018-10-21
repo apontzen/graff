@@ -1,7 +1,7 @@
 import copy
 
 from sqlalchemy import Integer, ForeignKey, sql
-from sqlalchemy.orm import aliased
+from sqlalchemy.orm import aliased, joinedload
 
 from graff import orm
 from .base import BaseQuery
@@ -75,7 +75,8 @@ class NodeQueryFromNodeQuery(NodeQuery):
         for col in base._get_temp_table_columns_to_carry_forward():
             self._copy_columns_source.append(col)
             self._copy_columns_target.append(self._temp_table_state.add_column(copy.copy(col),
-                                             query_callback=base._temp_table_state.get_callback_for_column(col)))
+                                                                               query_callback=base._temp_table_state.get_query_callback_for_column(col),
+                                                                               postprocess_callback=base._temp_table_state.get_postprocess_callback_for_column(col)))
 
     def __enter__(self):
         with self._base:
@@ -95,11 +96,15 @@ class NodeQueryFromNodeQuery(NodeQuery):
 
 
 class PersistentNodeQuery(NodeQueryFromNodeQuery):
+    _returns_node = False # don't also return the transient node column
+    _persistent_query_callback = staticmethod(NodeQueryFromNodeQuery._node_query_callback)
+    _persistent_query_postprocess = None
     def __init__(self, base):
         super(PersistentNodeQuery, self).__init__(base)
         self._copy_columns_source.append(base._temp_table_state.get_columns()[1].label("node_id_persist_source"))
         self._copy_columns_target.append(self._temp_table_state.add_column_with_unique_name("node_id_persistent", Integer, ForeignKey("nodes.id"),
-                                                                                            query_callback=self._node_query_callback))
+                                                                                            query_callback=self._persistent_query_callback,
+                                                                                            postprocess_callback=self._persistent_query_postprocess))
 
 
 class FollowQuery(NodeQueryFromNodeQuery):
@@ -125,40 +130,27 @@ class FollowQuery(NodeQueryFromNodeQuery):
         self._connection.execute(tt.delete().where(self._tt_node_column == None))
 
 
-class NodeAllPropertiesQuery(NodeQueryFromNodeQuery):
+class NodeAllPropertiesQuery(PersistentNodeQuery):
     """Represents a query that returns the underlying nodes, plus all their properties.
 
     The properties are returned as rows, i.e. each row contains the node and one of its properties.
     Thus the column count is increased by one, but the row count is increased by a number depending on how
     many properties each node has."""
 
-    _returns_node = False
 
     @staticmethod
-    def _property_query_callback(column):
-        alias = aliased(orm.NodeProperty)
-        return alias.value, alias, alias.id==column
+    def _persistent_query_callback(column):
+        alias = aliased(orm.Node)
+        return alias, alias, (alias.id == column), joinedload(alias.properties).joinedload(orm.NodeProperty.category)
 
-    def __init__(self, base):
-        super(NodeAllPropertiesQuery, self).__init__(base)
-        self._tt_property_column = \
-            self._temp_table_state.add_column_with_unique_name("nodeproperty_id", Integer, ForeignKey('nodeproperties.id'),
-                                                               query_callback=self._property_query_callback)
+    @staticmethod
+    def _persistent_query_postprocess(results, column_id):
+        new_results = []
+        for row in results:
+            property_dict = dict(row[column_id])
+            new_results.append(row[:column_id] + (property_dict,) + row[column_id+1:])
+        return new_results
 
-    def _get_populate_temp_table_statement(self):
-        prev_table = self._base.get_temp_table()
-        prev_node_column = self._base._tt_node_column
-        query = self._session.query(prev_node_column, orm.NodeProperty.id, *self._copy_columns_source)\
-            .select_from(prev_table)\
-            .outerjoin(orm.NodeProperty,
-                       (orm.NodeProperty.node_id==prev_node_column))
-
-        insert_statement = self.get_temp_table().insert().from_select([self._tt_node_column, self._tt_property_column]
-                                                                      +self._copy_columns_target, query)
-        return insert_statement
-
-    def _get_temp_table_columns_to_carry_forward(self):
-        return super(NodeAllPropertiesQuery, self)._get_temp_table_columns_to_carry_forward() + [self._tt_property_column]
 
 
 class NodeQueryWithValuesForInternalUse(NodeQueryFromNodeQuery):

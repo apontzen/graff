@@ -1,2 +1,2 @@
-from . import base, node
+from . import base, node, edge
 

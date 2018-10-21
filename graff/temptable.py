@@ -14,6 +14,7 @@ class TempTableState(object):
     def __init__(self):
         self._columns = [Column('id', Integer, primary_key=True)]
         self._columns_query_callback = [self._default_column_callback]
+        self._columns_postprocess_callback = [None]
         self._active = False
 
     @staticmethod
@@ -24,8 +25,11 @@ class TempTableState(object):
         """Return all Column objects in the schema for this temp table"""
         return self._columns
 
-    def get_callback_for_column(self, column):
+    def get_query_callback_for_column(self, column):
         return self._columns_query_callback[self._columns.index(column)]
+
+    def get_postprocess_callback_for_column(self, column):
+        return self._columns_postprocess_callback[self._columns.index(column)]
 
     def get_column(self, column_number):
         """Return a specific column based on the column ordering (starting at zero)"""
@@ -52,6 +56,7 @@ class TempTableState(object):
         self._assert_not_active()
 
         query_callback = kwargs.pop('query_callback', self._default_column_callback)
+        postprocess_callback = kwargs.pop('postprocess_callback', None)
 
         if len(args)==1 and isinstance(args[0], Column):
             new_column = args[0]
@@ -59,6 +64,7 @@ class TempTableState(object):
             new_column = Column(*args)
         self._columns.append(new_column)
         self._columns_query_callback.append(query_callback)
+        self._columns_postprocess_callback.append(postprocess_callback)
         return new_column
 
     def add_column_with_unique_name(self, name_root, *args, **kwargs):
@@ -121,13 +127,20 @@ class TempTableState(object):
     def get_query(self):
         """Return the sqlalchemy query for recovering user data from this table.
 
-        Will throw an error if the table has not yet been created."""
+        Will throw TempTableStateError if the table has not yet been created."""
         self._assert_active()
         query_entities = []
         join_entities = []
         join_conditions = []
+        query_options = []
         for col, callback in zip(self._columns, self._columns_query_callback):
-            query_entity, join_entity, join_condition = callback(col)
+            results = callback(col)
+            if len(results)<3 or len(results)>4:
+                raise ValueError("Internal error: incorrect number of results returned from a query callback")
+            query_entity, join_entity, join_condition = results[:3]
+            if len(results)==4:
+                query_options.append(results[3])
+
             if query_entity is not None:
                 query_entities.append(query_entity)
                 if join_entity is not None:
@@ -144,7 +157,20 @@ class TempTableState(object):
             q = q.outerjoin(table, condition)
             # use outer join so that null IDs translate to null in output, rather than disappearing
 
+        q = q.options(*query_options)
+
         return q
+
+    def postprocess_results(self, results):
+        current_column_offset = 0
+        for col, q_callback, p_callback in zip(self._columns, self._columns_query_callback, self._columns_postprocess_callback):
+            if p_callback is not None:
+                results = p_callback(results, current_column_offset)
+            entity = q_callback(col)[0]
+            if entity is not None:
+                current_column_offset+=1
+        return results
+
 
     def destroy(self):
         """Destroy the temporary table and return the schema to being mutable."""
