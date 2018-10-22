@@ -1,16 +1,14 @@
-import copy
-
 from sqlalchemy import Integer, ForeignKey, sql
 from sqlalchemy.orm import aliased, joinedload
 
 from graff import orm
-from .base import BaseQuery
+from .base import BaseQuery, QueryFromUnderlyingQuery, PersistentQuery
 
 
 class NodeQuery(BaseQuery):
     """Represents a query that returns nodes of a specific category or all categories"""
 
-    _returns_node = True
+    _user_query_returns_self = True
     # if True, a call to all() returns this node (plus any other columns asked for)
     # if False, a call to all() does not return this node, only the other columns
 
@@ -21,11 +19,11 @@ class NodeQuery(BaseQuery):
         else:
             self._category = None
 
-        if self._returns_node:
-            self._tt_node_column = self._temp_table_state.add_column("node_id", Integer, ForeignKey('nodes.id'),
+        if self._user_query_returns_self:
+            self._tt_current_location_id = self._temp_table_state.add_column("node_id", Integer, ForeignKey('nodes.id'),
                                                                      query_callback = self._node_query_callback)
         else:
-            self._tt_node_column = self._temp_table_state.add_column("noreturn_node_id", Integer, ForeignKey('nodes.id'),
+            self._tt_current_location_id = self._temp_table_state.add_column("noreturn_node_id", Integer, ForeignKey('nodes.id'),
                                                                      query_callback = self._null_query_callback)
 
     @staticmethod
@@ -39,7 +37,7 @@ class NodeQuery(BaseQuery):
 
     def _get_populate_temp_table_statement(self):
         orm_query = self._session.query(orm.Node.id).filter_by(category_id=self._category)
-        insert_statement = self.get_temp_table().insert().from_select([self._tt_node_column], orm_query)
+        insert_statement = self.get_temp_table().insert().from_select([self._tt_current_location_id], orm_query)
         return insert_statement
 
     def return_property(self, *args):
@@ -60,51 +58,43 @@ class NodeQuery(BaseQuery):
     def follow(self, category=None):
         """Return a query that follows an edge to the next node.
 
-        The edge may fall into a named category; or if None, all possible edges are followed."""
+        The edge may fall into a named category; or if None, all possible edges are followed.
+
+        Note that the q.follow(category) is equivalent to, but more efficient than, q.edge(category).node()"""
         return FollowQuery(self, category)
 
+    def edge(self, category=None):
+        """Return a query that returns all edges from this node.
 
-class NodeQueryFromNodeQuery(NodeQuery):
+        The edges may fall into a named category; or if None, all possible edges are returned."""
+        from . import edge
+        return edge.EdgeQueryFromNodeQuery(self, category)
+
+
+class NodeQueryFromUnderlyingQuery(NodeQuery, QueryFromUnderlyingQuery):
+    pass
+
+
+class NodeQueryFromNodeQuery(NodeQueryFromUnderlyingQuery):
     """Represents a query that returns nodes based on a previous set of nodes in an underlying 'base' query"""
     def __init__(self, base, category_=None):
-        super(NodeQueryFromNodeQuery, self).__init__(base._graph_connection, category_)
         assert isinstance(base, NodeQuery)
-        self._base = base
-        self._copy_columns_source = []
-        self._copy_columns_target = []
-        for col in base._get_temp_table_columns_to_carry_forward():
-            self._copy_columns_source.append(col)
-            self._copy_columns_target.append(self._temp_table_state.add_column(copy.copy(col),
-                                                                               query_callback=base._temp_table_state.get_query_callback_for_column(col),
-                                                                               postprocess_callback=base._temp_table_state.get_postprocess_callback_for_column(col)))
-
-    def __enter__(self):
-        with self._base:
-            super(NodeQueryFromNodeQuery, self).__enter__()
-
-    def _get_temp_table_columns_to_carry_forward(self):
-        return self._copy_columns_target
+        super(NodeQueryFromNodeQuery, self).__init__(base, category_)
 
     def _get_populate_temp_table_statement(self):
-        orm_query = self._session.query(self._base._tt_node_column, *self._copy_columns_source)
+        orm_query = self._session.query(self._base._tt_current_location_id, *self._copy_columns_source)
 
         if self._category:
             orm_query = orm_query.filter_by(category_id=self._category)
-        insert_statement = self.get_temp_table().insert().from_select([self._tt_node_column] + self._copy_columns_target, orm_query)
+        insert_statement = self.get_temp_table().insert().from_select([self._tt_current_location_id] + self._copy_columns_target, orm_query)
 
         return insert_statement
 
 
-class PersistentNodeQuery(NodeQueryFromNodeQuery):
-    _returns_node = False # don't also return the transient node column
+class PersistentNodeQuery(PersistentQuery, NodeQueryFromNodeQuery):
+    _user_query_returns_self = False # don't also return the transient node column
     _persistent_query_callback = staticmethod(NodeQueryFromNodeQuery._node_query_callback)
-    _persistent_query_postprocess = None
-    def __init__(self, base):
-        super(PersistentNodeQuery, self).__init__(base)
-        self._copy_columns_source.append(base._temp_table_state.get_columns()[1].label("node_id_persist_source"))
-        self._copy_columns_target.append(self._temp_table_state.add_column_with_unique_name("node_id_persistent", Integer, ForeignKey("nodes.id"),
-                                                                                            query_callback=self._persistent_query_callback,
-                                                                                            postprocess_callback=self._persistent_query_postprocess))
+    _persistent_postprocess_callback = None
 
 
 class FollowQuery(NodeQueryFromNodeQuery):
@@ -116,18 +106,18 @@ class FollowQuery(NodeQueryFromNodeQuery):
         prev_table = self._base.get_temp_table()
         query = self._session.query(orm.Edge.node_to_id, *self._copy_columns_source)\
             .select_from(prev_table)\
-            .outerjoin(orm.Edge, orm.Edge.node_from_id == self._base._tt_node_column)
+            .outerjoin(orm.Edge, orm.Edge.node_from_id == self._base._tt_current_location_id)
         # outer join to capture multiple edges; but will later filter to remove NULL entries
 
         if self._category:
             query = query.filter(orm.Edge.category_id == self._category)
-        insert_statement = self.get_temp_table().insert().from_select([self._tt_node_column] + self._copy_columns_target, query)
+        insert_statement = self.get_temp_table().insert().from_select([self._tt_current_location_id] + self._copy_columns_target, query)
         return insert_statement
 
     def _filter_temp_table(self):
         # Remove NULL entries generated by outer join above
         tt = self.get_temp_table()
-        self._connection.execute(tt.delete().where(self._tt_node_column == None))
+        self._connection.execute(tt.delete().where(self._tt_current_location_id == None))
 
 
 class NodeAllPropertiesQuery(PersistentNodeQuery):
@@ -144,7 +134,7 @@ class NodeAllPropertiesQuery(PersistentNodeQuery):
         return alias, alias, (alias.id == column), joinedload(alias.properties).joinedload(orm.NodeProperty.category)
 
     @staticmethod
-    def _persistent_query_postprocess(results, column_id):
+    def _persistent_postprocess_callback(results, column_id):
         new_results = []
         for row in results:
             property_dict = dict(row[column_id])
@@ -152,10 +142,8 @@ class NodeAllPropertiesQuery(PersistentNodeQuery):
         return new_results
 
 
-
 class NodeQueryWithValuesForInternalUse(NodeQueryFromNodeQuery):
     """Represents a query that returns the underlying nodes and also internally obtains values of the named properties.
-
     This is a base class for alternative possible uses for the properties. It does not directly expose the results
     to the user, and therefore is not recommended for direct use. NodeNamedPropertiesQuery is the user-exposed class
     that actually returns the values of the property, whereas NodeFilterNamedPropertiesQuery instead uses the
@@ -183,20 +171,20 @@ class NodeQueryWithValuesForInternalUse(NodeQueryFromNodeQuery):
 
     def _get_populate_temp_table_statement(self):
         prev_table = self._base.get_temp_table()
-        underlying_tt_node_column = self._base._tt_node_column
+        underlying_tt_current_location_id = self._base._tt_current_location_id
         aliases = []
         for this_category_id in self._categories:
             aliases+=[aliased(orm.NodeProperty)]
 
-        query = self._session.query(underlying_tt_node_column, *(self._copy_columns_source + [a.id for a in aliases])) \
+        query = self._session.query(underlying_tt_current_location_id, *(self._copy_columns_source + [a.id for a in aliases])) \
             .select_from(prev_table)
 
         for this_property_alias, this_category_id in zip(aliases, self._categories):
             query = query.outerjoin(this_property_alias,
-                       (this_property_alias.node_id == underlying_tt_node_column) & (
+                       (this_property_alias.node_id == underlying_tt_current_location_id) & (
                         this_property_alias.category_id==this_category_id))
 
-        insert_cols = [self._tt_node_column] + self._copy_columns_target + self._tt_columns
+        insert_cols = [self._tt_current_location_id] + self._copy_columns_target + self._tt_columns
         insert_statement = self.get_temp_table().insert().from_select(insert_cols, query)
 
         return insert_statement
@@ -207,7 +195,7 @@ class NodeNamedPropertiesQuery(NodeQueryWithValuesForInternalUse):
 
     The properties are returned as columns, i.e. each named category generates a column that in turn has the
     value of the node's property. The row count is unchanged from the underlying query."""
-    _returns_node = False
+    _user_query_returns_self = False
     _column_base = "nodeproperty_id"
 
     @staticmethod
@@ -230,7 +218,7 @@ class NodeFilterNamedPropertiesQuery(NodeQueryWithValuesForInternalUse):
 
     Note that the properties are not returned to the user."""
 
-    _returns_node = True
+    _user_query_returns_self = True
 
     def __init__(self, base, cond):
         self._condition = cond

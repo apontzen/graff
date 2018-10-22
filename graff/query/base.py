@@ -1,6 +1,7 @@
+import copy
+from sqlalchemy import Integer, ForeignKey, sql
 from sqlalchemy.orm import aliased
 
-from .. import orm
 from ..temptable import TempTableState
 
 
@@ -30,11 +31,16 @@ class BaseQuery(object):
     SQL must be performed within the context.
     """
 
+    _user_query_returns_self = True
+    # if True, a call to all() returns this node or edge (plus any other columns asked for)
+    # if False, a call to all() does not return this node or edge, only the other columns
+
     def __init__(self, graph_connection):
         self._graph_connection = graph_connection
         self._session = graph_connection.get_sqlalchemy_session()
         self._connection = self._session.connection()
         self._temp_table_state = TempTableState()
+        self._copy_columns_target = []
 
     def _get_populate_temp_table_statement(self):
         """Get the SQL statement to insert rows into the temporary table for this query.
@@ -103,7 +109,7 @@ class BaseQuery(object):
         """Return a list of columns in the temp table that should be propagated into any chained queries.
 
         For example, this allows the results of return_property(...) to propagate along the query chain"""
-        return []
+        return self._copy_columns_target
 
     def __getitem__(self, item):
         """Return a reference to a named property in this query, suitable for use in a filter condition"""
@@ -120,3 +126,51 @@ class BaseQuery(object):
     @staticmethod
     def _null_query_callback(column):
         return None, None, None
+
+
+
+
+class QueryFromUnderlyingQuery(BaseQuery):
+    """Represents a query that returns nodes based on a previous set of nodes in an underlying 'base' query"""
+
+    def __init__(self, base):
+        super(QueryFromUnderlyingQuery, self).__init__(base._graph_connection)
+        self._carry_forward_temp_table_columns(base)
+        self._base = base
+
+    def __enter__(self):
+        with self._base:
+            super(QueryFromUnderlyingQuery, self).__enter__()
+
+    def _carry_forward_temp_table_columns(self, base):
+        self._base = base
+        self._copy_columns_source = []
+        self._copy_columns_target = []
+        for col in base._get_temp_table_columns_to_carry_forward():
+            self._copy_columns_source.append(col)
+            self._copy_columns_target.append(
+                self._temp_table_state.add_column(copy.copy(col), query_callback=base._temp_table_state.get_query_callback_for_column(col),
+                                                                  postprocess_callback=base._temp_table_state.get_postprocess_callback_for_column(col)
+                                                  )
+                                             )
+
+class PersistentQuery(BaseQuery):
+    """Represents a query where a result will be carried forward into any derived queries"""
+
+    _user_query_returns_self = False # the persistent column will be returned, so don't also return this
+
+    @staticmethod
+    def _persistent_query_callback(column):
+        raise RuntimeError("This callback must be implemented in a subclass")
+
+    @staticmethod
+    def _persistent_postprocess_callback(results, column_id):
+        raise RuntimeError("This callback must be implemented in a subclass")
+
+    def __init__(self, base):
+        super(PersistentQuery, self).__init__(base)
+        self._copy_columns_source.append(base._temp_table_state.get_columns()[1].label("node_id_persist_source"))
+        self._copy_columns_target.append(self._temp_table_state.add_column_with_unique_name("node_id_persistent", Integer, ForeignKey("nodes.id"),
+                                                                                            query_callback=self._persistent_query_callback,
+                                                                                            postprocess_callback=self._persistent_postprocess_callback))
+

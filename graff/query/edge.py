@@ -1,16 +1,12 @@
 from sqlalchemy import Integer, ForeignKey
 from sqlalchemy.orm import aliased
 
-from graff import orm
-from .base import BaseQuery
-
+from .. import orm
+from .base import BaseQuery, QueryFromUnderlyingQuery
+from .node import NodeQuery, NodeQueryFromUnderlyingQuery
 
 class EdgeQuery(BaseQuery):
     """Represents a query that returns nodes of a specific category or all categories"""
-
-    _returns_edge = True
-    # if True, a call to all() returns this edge (plus any other columns asked for)
-    # if False, a call to all() does not return this node, only the other columns
 
     def __init__(self, graph_connection, category_=None):
         super(EdgeQuery, self).__init__(graph_connection)
@@ -19,7 +15,7 @@ class EdgeQuery(BaseQuery):
         else:
             self._category = None
 
-        if self._returns_edge:
+        if self._user_query_returns_self:
             self._tt_edge_column = self._temp_table_state.add_column("edge_id", Integer, ForeignKey('nodes.id'),
                                                                      query_callback = self._edge_query_callback)
         else:
@@ -38,21 +34,56 @@ class EdgeQuery(BaseQuery):
 
     def return_property(self, *args):
         """Return a query that returns properties"""
-        return NodeNamedPropertiesQuery(self, *args)
+        return EdgeNamedPropertiesQuery(self, *args)
 
     def return_properties(self):
-        return NodeAllPropertiesQuery(self)
+        return EdgeAllPropertiesQuery(self)
 
     def return_this(self, *args):
         """Return a query that returns this node"""
-        return PersistentNodeQuery(self)
+        return PersistentEdgeQuery(self)
 
     def filter(self, condition):
         """Return a new graph query that represents the old one filtered by a stated condition"""
-        return NodeFilterNamedPropertiesQuery(self, condition)
+        return NodeFilterEdgePropertiesQuery(self, condition)
 
-    def follow(self, category=None):
-        """Return a query that follows an edge to the next node.
+    def node(self):
+        """Return a query that follows an edge to the target node."""
+        return TargetNodeQuery(self)
 
-        The edge may fall into a named category; or if None, all possible edges are followed."""
-        return FollowQuery(self, category)
+
+class TargetNodeQuery(NodeQueryFromUnderlyingQuery):
+    def __init__(self, base, category_=None):
+        super(TargetNodeQuery, self).__init__(base)
+        assert isinstance(base, EdgeQuery)
+        self._base = base
+        self._carry_forward_temp_table_columns(base)
+
+    def _get_populate_temp_table_statement(self):
+        orm_query = self._session.query(orm.Edge.node_to_id, *self._copy_columns_source).\
+            select_from(self._base.get_temp_table()).\
+            join(orm.Edge, self._base._tt_edge_column==orm.Edge.id)
+
+        insert_statement = self.get_temp_table().insert().from_select([self._tt_current_location_id] + self._copy_columns_target, orm_query)
+
+        return insert_statement
+
+class EdgeQueryFromNodeQuery(EdgeQuery, QueryFromUnderlyingQuery):
+    def __init__(self, base, category_=None):
+        assert isinstance(base, NodeQuery)
+        super(EdgeQueryFromNodeQuery, self).__init__(base, category_)
+
+    def _get_populate_temp_table_statement(self):
+        join_cond = self._base._tt_current_location_id == orm.Edge.node_from_id
+        if self._category is not None:
+            join_cond&= orm.Edge.category_id==self._category
+
+        orm_query = self._session.query(orm.Edge.id, *self._copy_columns_source). \
+            select_from(self._base.get_temp_table()). \
+            join(orm.Edge, join_cond)
+
+        insert_statement = self.get_temp_table().insert().from_select(
+            [self._tt_edge_column] + self._copy_columns_target, orm_query)
+
+        return insert_statement
+

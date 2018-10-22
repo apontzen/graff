@@ -72,3 +72,4 @@ def test_return_property_multiple_named_results():
     results = test_db.query_node("multipropertynode").return_this().return_property("property2","property1").all()
     expected = [(multiproperty_node,"two",1)]
     assert results==expected
+
