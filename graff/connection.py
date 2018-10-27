@@ -31,7 +31,7 @@ class Connection(object):
         """Returns a query for edges, optionally of a given category"""
         return query.edge.EdgeQuery(self, *args)
 
-    def add_node(self, category, properties={}):
+    def add_node(self, category, properties=None):
         """Add a node of the specified category
 
         :param category: the category for the new nodes
@@ -49,15 +49,8 @@ class Connection(object):
         session.add(new_node)
         session.flush()
 
-        property_objects = []
-        for k, v in iteritems(properties):
-            prop = NodeProperty()
-            prop.node_id = new_node.id
-            prop.category_id = self.category_cache.get_existing_or_new_id(k)
-            prop.value = v
-            property_objects.append(prop)
-
-        session.add_all(property_objects)
+        if properties is not None:
+            self._bulk_insert_properties(new_node.id, [properties], NodeProperty)
 
         session.commit()
         return new_node
@@ -123,7 +116,7 @@ class Connection(object):
                 property_object_mappings.append(dict_this_property)
         session.bulk_insert_mappings(class_, property_object_mappings)
 
-    def add_edge(self, category, node_from, node_to):
+    def add_edge(self, category, node_from, node_to, properties=None):
         session = self.get_sqlalchemy_session()
         category_id = self.category_cache.get_existing_or_new_id(category)
         if isinstance(node_from,Node):
@@ -132,7 +125,9 @@ class Connection(object):
             node_to = node_to.id
         edge = Edge(category_id = category_id, node_from_id=node_from, node_to_id=node_to)
         session.add(edge)
-
+        session.flush()
+        if properties is not None:
+            self._bulk_insert_properties(edge.id, [properties], EdgeProperty)
         session.commit()
         return edge
 

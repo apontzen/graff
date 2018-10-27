@@ -98,3 +98,16 @@ class PersistentEdgeQuery(PersistentQuery, EdgeQueryFromEdgeQuery):
     _persistent_query_callback = GenericEdgeQuery._edge_query_callback
     _persistent_postprocess_callback = None
     _node_or_edge = 'edge'
+
+
+class EdgeQueryWithValuesForInternalUse(QueryWithValuesForInternalUse, EdgeQueryFromEdgeQuery):
+    _node_or_edge = 'edge'
+    _node_or_edge_orm = orm.Edge
+    _property_orm = orm.EdgeProperty
+
+class EdgeNamedPropertiesQuery(NamedPropertiesQuery, EdgeQueryWithValuesForInternalUse):
+    """Represents a query that returns the underlying edges, plus named properties of those edges.
+
+    The properties are returned as columns, i.e. each named category generates a column that in turn has the
+    value of the node's property. The row count is unchanged from the underlying query."""
+    pass

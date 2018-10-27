@@ -35,3 +35,8 @@ def test_persistent_node_and_edge_query():
     assert [x.id for x in results[1]]==[1, 3, 4]
     assert [type(x) for x in results[0]]==[orm.Node, orm.Edge, orm.Node]
     assert [type(x) for x in results[1]]==[orm.Node, orm.Edge, orm.Node]
+
+def test_named_edge_property_query():
+    results = test_db.query_node("simulation").edge().return_property("test_property").\
+        node().edge().return_property("test_property").all()
+    assert results==[(1,2),(3,4)]
