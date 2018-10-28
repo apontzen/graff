@@ -32,6 +32,10 @@ class BaseQuery(object):
     SQL must be performed within the context.
     """
 
+    _node_or_edge = None  # child class to set this to 'node' or 'edge'
+    _node_or_edge_orm = None # must be set to either orm.Node or orm.Edge by child class
+    _property_orm = None  # must be set to either orm.NodeProperty or orm.EdgeProperty by child class
+
     _user_query_returns_self = True
     # if True, a call to all() returns this node or edge (plus any other columns asked for)
     # if False, a call to all() does not return this node or edge, only the other columns
@@ -43,6 +47,17 @@ class BaseQuery(object):
         self._category = None
         self._temp_table_state = TempTableState()
         self._copy_columns_target = []
+        if self._user_query_returns_self:
+            self._tt_current_location_id = self._temp_table_state.add_column(self._node_or_edge+"_id", Integer,
+                                                                             ForeignKey(self._node_or_edge+'s.id'),
+                                                                     query_callback = self._user_query_callback,
+                                                                     keep_at_end = True)
+        else:
+            self._tt_current_location_id = self._temp_table_state.add_column("noreturn_node_id", Integer,
+                                                                             ForeignKey('nodes.id'),
+                                                                     query_callback = self._null_query_callback,
+                                                                     keep_at_end =True)
+
 
     def _get_populate_temp_table_statement(self):
         """Get the SQL statement to insert rows into the temporary table for this query.
@@ -135,6 +150,17 @@ class BaseQuery(object):
         else:
             self._category = None
 
+class QueryFromCategory(BaseQuery):
+    """Represents a query that returns nodes/edges of a given category"""
+
+    def __init__(self, graph_connection, category_=None):
+        super(QueryFromCategory, self).__init__(graph_connection)
+        self._set_category(category_)
+
+    def _get_populate_temp_table_statement(self):
+        orm_query = self._session.query(self._node_or_edge_orm.id).filter_by(category_id=self._category)
+        insert_statement = self.get_temp_table().insert().from_select([self._tt_current_location_id], orm_query)
+        return insert_statement
 
 class QueryFromUnderlyingQuery(BaseQuery):
     """Represents a query that returns nodes based on a previous set of nodes in an underlying 'base' query"""
@@ -174,7 +200,6 @@ class PersistentQuery(QueryFromUnderlyingQuery):
     """Represents a query where a result will be carried forward into any derived queries"""
 
     _user_query_returns_self = False # the persistent column will be returned, so don't also return this
-    _node_or_edge = None # child class to set this to 'node' or 'edge'
 
     @classmethod
     def _persistent_query_callback(cls, column):
@@ -199,9 +224,6 @@ class AllPropertiesQuery(PersistentQuery):
     Thus the column count is increased by one, but the row count is increased by a number depending on how
     many properties each node has."""
 
-    _node_or_edge_orm = None # must be set to either orm.Node or orm.Edge by child class
-    _property_orm = None  # must be set to either orm.NodeProperty or orm.EdgeProperty by child class
-
     @classmethod
     def _persistent_query_callback(cls, column):
         alias = aliased(cls._node_or_edge_orm)
@@ -218,11 +240,8 @@ class AllPropertiesQuery(PersistentQuery):
 class QueryWithValuesForInternalUse(QueryFromUnderlyingQuery):
     """Represents a query that returns the underlying query and also internally obtains values of the named properties.
     """
-    _column_base = "noreturn_property_id"
-
+    _column_base = "property_id"
     _property_query_callback = staticmethod(BaseQuery._null_query_callback)
-
-    _property_orm = None # must be set to either orm.NodeProperty or orm.EdgeProperty by child class
 
     def __init__(self, base, *categories):
         super(QueryWithValuesForInternalUse, self).__init__(base)
@@ -268,7 +287,6 @@ class NamedPropertiesQuery(QueryWithValuesForInternalUse):
     The properties are returned as columns, i.e. each named category generates a column that in turn has the
     value of the node's property. The row count is unchanged from the underlying query."""
     _user_query_returns_self = False
-    _column_base = "property_id"
 
     @classmethod
     def _property_query_callback(cls, column):

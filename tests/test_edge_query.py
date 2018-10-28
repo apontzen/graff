@@ -1,4 +1,5 @@
 from graff import orm
+import graff.condition as c
 
 def setup():
     import test_basic_query
@@ -40,3 +41,13 @@ def test_named_edge_property_query():
     results = test_db.query_node("simulation").edge().return_property("test_property").\
         node().edge().return_property("test_property").all()
     assert results==[(1,2),(3,4)]
+
+def test_edge_properties_query():
+    results = test_db.query_edge("is_successor").return_properties().all()
+    assert len(results)==1
+    assert results[0]=={'test_property': 5, 'comment': 'test comment'}
+
+def test_edge_filter_query():
+    results = test_db.query_edge("has_timestep").filter(c.Property('test_property')>2).all()
+    assert len(results)==1
+    assert results[0].id==3

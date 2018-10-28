@@ -16,6 +16,7 @@ class TempTableState(object):
         self._columns_query_callback = [self._default_column_callback]
         self._columns_postprocess_callback = [None]
         self._active = False
+        self._insert_point = 1
 
     @staticmethod
     def _default_column_callback(column):
@@ -46,10 +47,12 @@ class TempTableState(object):
 
         Otherwise the arguments are interpreted as arguments to the sqlalchemy.Column constructor. Additionally:
 
-        :arg query_callback: A function called at query time, to present the data in the temp table to a user.
+        :param query_callback: A function called at query time, to present the data in the temp table to a user.
           It is passed this column and the existing query, and must modify the query in such a way as to add
           a column for the data the user actually wants to see. If query_callback is not specified, the literal
           column is added.
+
+        :param keep_at_end: Set to True to signal that this column must always be the last in the temp table.
 
         """
 
@@ -57,14 +60,19 @@ class TempTableState(object):
 
         query_callback = kwargs.pop('query_callback', self._default_column_callback)
         postprocess_callback = kwargs.pop('postprocess_callback', None)
+        keep_at_end = kwargs.pop('keep_at_end', False)
 
         if len(args)==1 and isinstance(args[0], Column):
             new_column = args[0]
         else:
             new_column = Column(*args)
-        self._columns.append(new_column)
-        self._columns_query_callback.append(query_callback)
-        self._columns_postprocess_callback.append(postprocess_callback)
+        self._columns.insert(self._insert_point, new_column)
+        self._columns_query_callback.insert(self._insert_point, query_callback)
+        self._columns_postprocess_callback.insert(self._insert_point, postprocess_callback)
+
+        if not keep_at_end:
+            self._insert_point+=1
+
         return new_column
 
     def add_column_with_unique_name(self, name_root, *args, **kwargs):

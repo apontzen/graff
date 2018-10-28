@@ -3,19 +3,15 @@ from .base import *
 class GenericNodeQuery(BaseQuery):
     """Represents a query that returns nodes of a specific category or all categories"""
 
+    _node_or_edge = 'node'
+    _node_or_edge_orm = orm.Node
+    _property_orm = orm.NodeProperty
     _user_query_returns_self = True
     # if True, a call to all() returns this node (plus any other columns asked for)
     # if False, a call to all() does not return this node, only the other columns
 
     def __init__(self, graph_connection):
         super(GenericNodeQuery, self).__init__(graph_connection)
-
-        if self._user_query_returns_self:
-            self._tt_current_location_id = self._temp_table_state.add_column("node_id", Integer, ForeignKey('nodes.id'),
-                                                                     query_callback = self._node_query_callback)
-        else:
-            self._tt_current_location_id = self._temp_table_state.add_column("noreturn_node_id", Integer, ForeignKey('nodes.id'),
-                                                                     query_callback = self._null_query_callback)
 
     @classmethod
     def _null_query_callback(cls, column):
@@ -25,6 +21,8 @@ class GenericNodeQuery(BaseQuery):
     def _node_query_callback(cls, column):
         alias = aliased(orm.Node)
         return alias, alias, (alias.id==column)
+
+    _user_query_callback = _node_query_callback
 
     def return_property(self, *args):
         """Return a query that returns properties"""
@@ -57,15 +55,8 @@ class GenericNodeQuery(BaseQuery):
         return edge.EdgeQueryFromNodeQuery(self, category)
 
 
-class NodeQuery(GenericNodeQuery):
-    def __init__(self, graph_connection, category_=None):
-        super(NodeQuery, self).__init__(graph_connection)
-        self._set_category(category_)
-
-    def _get_populate_temp_table_statement(self):
-        orm_query = self._session.query(orm.Node.id).filter_by(category_id=self._category)
-        insert_statement = self.get_temp_table().insert().from_select([self._tt_current_location_id], orm_query)
-        return insert_statement
+class NodeQuery(QueryFromCategory, GenericNodeQuery):
+    pass
 
 
 class NodeQueryFromUnderlyingQuery(GenericNodeQuery, QueryFromUnderlyingQuery):
@@ -84,9 +75,6 @@ class PersistentNodeQuery(PersistentQuery, NodeQueryFromNodeQuery):
     _persistent_query_callback = NodeQueryFromNodeQuery._node_query_callback
     _persistent_postprocess_callback = None
 
-    _node_or_edge = 'node'
-    _node_or_edge_orm = orm.Node
-    _property_orm = orm.NodeProperty
 
 
 class FollowQuery(NodeQueryFromNodeQuery):
@@ -116,14 +104,10 @@ class FollowQuery(NodeQueryFromNodeQuery):
         self._connection.execute(tt.delete().where(self._tt_current_location_id == None))
 
 class NodeAllPropertiesQuery(AllPropertiesQuery, NodeQueryFromNodeQuery):
-    _node_or_edge = 'node'
-    _node_or_edge_orm = orm.Node
-    _property_orm = orm.NodeProperty
+    pass
 
 class NodeQueryWithValuesForInternalUse(QueryWithValuesForInternalUse, NodeQueryFromNodeQuery):
-    _node_or_edge = 'node'
-    _node_or_edge_orm = orm.Node
-    _property_orm = orm.NodeProperty
+    pass
 
 
 class NodeNamedPropertiesQuery(NamedPropertiesQuery, NodeQueryWithValuesForInternalUse):
