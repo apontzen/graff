@@ -12,6 +12,7 @@ def test_friends_of_friends():
     assert len(friends_of_friends) == 99834
 
     for e_fof, e_source, a_result in zip(expected_fof, expected_sources, friends_of_friends[:500:50]):
-        assert e_fof== a_result[0].id
-        assert e_source== a_result[1].id
+        assert e_source == a_result[0].id
+        assert e_fof== a_result[1].id
+
 

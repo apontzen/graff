@@ -24,7 +24,7 @@ def test_column_backreference_in_filter():
     q2 = q2.filter(q1['net_worth'] > 100*q2["price"])
     results = q2.all()
     assert len(results)==11 # John owns 1 thing less than 1/100th of his net worth; Richard owns 10
-    for node, net_worth, name, price in results:
+    for net_worth, name, price, final_node in results:
         assert net_worth>100*price
 
 def test_mixed_model_column_comparison():
