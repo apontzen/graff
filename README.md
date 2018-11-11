@@ -1,4 +1,5 @@
-# graff
+<img src="docs/graff.svg" width=200 title="graff">
+
 _Graff_ is a graph database for python, implemented using [sqlalchemy](http://www.sqlalchemy.org) for 
 compatibility with a wide range of database storage engines. It is also inspired by sqlalchemy in the way it
 allows queries to be built generatively. But for most uses, the user does not need to have knowledge of
