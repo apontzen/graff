@@ -34,14 +34,17 @@ def init_friends_network(n_people=1000, n_connections=10000):
 
     people_from = rng.choices(range(1,n_people+1), k=n_connections)
     people_to = rng.choices(range(1,n_people+1), k=n_connections)
-    connections = zip(people_from, people_to)
+    connections = list(zip(people_from, people_to))
 
     people_firstname = rng.choices(some_names, k=n_people)
     people_lastname = rng.choices(some_names, k=n_people)
     people_name = ["%s %s"%(f,l) for f,l in zip(people_firstname, people_lastname)]
+    ages = [rng.randint(18,60) for i in range(n_people)]
 
-    con.add_nodes("person", n_people, [{'name': pn} for pn in people_name])
-    con.add_edges("likes", connections)
+    number_messages = [rng.randint(0,100) for i in range(n_connections)]
+
+    con.add_nodes("person", n_people, [{'name': pn, 'age': page} for pn, page in zip(people_name,ages)])
+    con.add_edges("likes", connections, [{'num_messages': n} for n in number_messages])
     return con
 
 def assert_edge_connections(edges_list, pairs_list):

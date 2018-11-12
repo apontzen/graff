@@ -12,30 +12,32 @@ _Graff_ evolved from the [tangos](pynbody.github.io/tangos) database project for
 Initialise a graph database in RAM:
 
 ```python
+import graff
 mydb= graff.Connection()
 ```
 
 Initialise a graph database in RAM and populate it with a random network of
 people and friend relationships
 ```python
+import graff.testing
 mydb = graff.testing.init_friends_network(n_people=10, n_connections=100)
 ```
 
 Get the 'nodes' corresponding to all people:
 
 ```python
-nodes = mydb.query_node("person").all()
+mydb.query_node("person").all()
 ```
 
 Get the names of all people:
 
 ```python
-names = mydb.query_node("person").return_property("name").all()
+mydb.query_node("person").return_property("name").all()
 ```
 
 Count the number of friends-of-friends connections:
 ```python
-count = mydb.query_node("person").follow("likes").follow("likes").count()
+mydb.query_node("person").follow("likes").follow("likes").count()
 ```
 
 Get the names of all friends-of-friends, and print the first 100 pairs:
@@ -45,4 +47,25 @@ fof = mydb.query_node("person").return_property("name").\
                                 return_property("name").all()
 for name_a, name_b in fof[:100]:
     print(name_b, "is a friend of a friend of", name_a)
+```
+
+Get all known properties of the first person in the database:
+```python
+mydb.query_node("person").return_properties().first()
+```
+
+Return the edge objects linking people:
+```python
+mydb.query_node("person").edge("likes").all()
+```
+
+Return a property from the edge as well as the nodes:
+```python
+results = mydb.query_node("person").return_property("name").\
+                                    edge("likes").return_property("num_messages").\
+                                    node().return_property("name").all()
+                               
+for name_a,num,name_b in results:
+    print(name_a, "has sent", num, "messages to", name_b)
+
 ```

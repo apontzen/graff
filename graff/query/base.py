@@ -109,6 +109,7 @@ class BaseQuery(object):
         """Constructs the query and returns the first row in the result"""
         with self:
             result = self._get_temp_table_query().first()
+        result = self._temp_table_state.postprocess_results([result])[0]
         return self._reformat_results_row(result)
 
 
