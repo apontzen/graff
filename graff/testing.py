@@ -1,9 +1,25 @@
-from . import connection
+from . import connection, orm
 import random
-import sys
-def init_ownership_graph():
+import os
+from sqlalchemy import create_engine
 
-    con = connection.Connection()
+def _wipe_database(uri):
+    if '//' not in uri:
+        uri = 'sqlite:///' + uri
+    engine = create_engine(uri)
+    orm.Base.metadata.drop_all(engine)
+    engine.dispose()
+
+def get_test_connection(test_uri=None):
+    if test_uri is None:
+        test_uri = os.environ.get('GRAFF_TEST_DATABASE_URI','')
+    # wipe the database in case it already exists:
+    _wipe_database(test_uri)
+    return connection.Connection(test_uri)
+
+def init_ownership_graph(db_uri=None):
+
+    con = get_test_connection(db_uri)
 
     person_node1 = con.add_node("person", {"net_worth": 1000, "name": "John McGregor"})
     person_node2 = con.add_node("person", {"net_worth": 10000, "name": "Sir Richard Stiltington"})
@@ -28,9 +44,9 @@ some_names = ['Aarhus', 'Aeneid', 'Aldrich', 'Amelia', 'Anita', 'Ares', 'Atalant
               'Sutton', 'Tasmania', 'Thomson', 'Transylvania', 'Ulster', 'Venusian', 'Waals', 'Weinberg', 'Wilkinson',
               'Wylie', 'Zen']
 
-def init_friends_network(n_people=1000, n_connections=10000):
+def init_friends_network(n_people=1000, n_connections=10000, db_uri=None):
     rng = random.Random(1)
-    con = connection.Connection()
+    con = get_test_connection(db_uri)
 
     people_from = rng.choices(range(1,n_people+1), k=n_connections)
     people_to = rng.choices(range(1,n_people+1), k=n_connections)

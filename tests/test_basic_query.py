@@ -4,7 +4,7 @@ import graff, graff.category
 
 def setup():
     global sim_node, ts_node, ts2_node, halo_node, halo2_node, test_db, props_for_ts_node, props_for_ts2_node
-    test_db = graff.Connection()
+    test_db = graff.testing.get_test_connection()
 
     sim_node = test_db.add_node("simulation")
     props_for_ts_node = {'timestep_name': "ts1", 'dummy_property_1': "dp1 for ts1", "dummy_property_2": "dp2 for ts1"}

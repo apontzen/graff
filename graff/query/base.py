@@ -49,12 +49,12 @@ class BaseQuery(object):
         self._copy_columns_target = []
         if self._user_query_returns_self:
             self._tt_current_location_id = self._temp_table_state.add_column(self._node_or_edge+"_id", Integer,
-                                                                             ForeignKey(self._node_or_edge+'s.id'),
+                                                                             #ForeignKey(self._node_or_edge+'s.id'),
                                                                      query_callback = self._user_query_callback,
                                                                      keep_at_end = True)
         else:
             self._tt_current_location_id = self._temp_table_state.add_column("noreturn_node_id", Integer,
-                                                                             ForeignKey('nodes.id'),
+                                                                             #ForeignKey('nodes.id'),
                                                                      query_callback = self._null_query_callback,
                                                                      keep_at_end =True)
 
@@ -214,7 +214,7 @@ class PersistentQuery(QueryFromUnderlyingQuery):
         super(PersistentQuery, self).__init__(base)
         self._copy_columns_source.append(base._temp_table_state.get_columns()[-1].label(self._node_or_edge+"_id_persist_source"))
         self._copy_columns_target.append(self._temp_table_state.add_column_with_unique_name(self._node_or_edge+"_id_persistent",
-                                                                                            Integer, ForeignKey(self._node_or_edge+"s.id"),
+                                                                                            Integer, #ForeignKey(self._node_or_edge+"s.id"),
                                                                                             query_callback=self._persistent_query_callback,
                                                                                             postprocess_callback=self._persistent_postprocess_callback))
 
@@ -252,7 +252,7 @@ class QueryWithValuesForInternalUse(QueryFromUnderlyingQuery):
         self._tt_columns = []
         for n in self._category_names:
             new_col = self._temp_table_state.add_column_with_unique_name(self._column_base,
-                                                                         Integer, ForeignKey(self._property_orm.id),
+                                                                         Integer, #ForeignKey(self._property_orm.id),
                                                                          query_callback=self._property_query_callback)
             self._tt_column_mapping[n] = new_col
             self._tt_columns.append(new_col)

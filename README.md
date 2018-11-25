@@ -13,11 +13,19 @@ Initialise a graph database in RAM:
 
 ```python
 import graff
-mydb= graff.Connection()
+mydb = graff.Connection()
 ```
 
+Initialise a graph database in the specified [mySQL](https://www.mysql.com) database:
+
+```python
+mydb = graff.Connection('mysql+pymysql://mysql_user:mysql_password@localhost/mysql_database_name')
+```
+(For more information see the [SQLAlchemy documentation](https://docs.sqlalchemy.org/en/latest/core/engines.html#mysql) 
+around dialects and engines.)
+
 Initialise a graph database in RAM and populate it with a random network of
-people and friend relationships
+people and friend relationships:
 ```python
 import graff.testing
 mydb = graff.testing.init_friends_network(n_people=10, n_connections=100)

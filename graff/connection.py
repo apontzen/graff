@@ -7,12 +7,11 @@ from six import iteritems
 from six.moves import range
 
 class Connection(object):
-    def __init__(self, db_uri="", verbose=False, timeout=30):
+    def __init__(self, db_uri="", sqlalchemy_engine_kwargs={}):
         if '//' not in db_uri:
             db_uri = 'sqlite:///' + db_uri
 
-        _engine = create_engine(db_uri, echo=verbose,
-                                isolation_level='READ UNCOMMITTED', connect_args={'timeout': timeout})
+        _engine = create_engine(db_uri, **sqlalchemy_engine_kwargs)
 
         self._SessionClass = sessionmaker(bind=_engine)
         self._internal_session = self._SessionClass()

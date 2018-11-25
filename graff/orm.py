@@ -1,8 +1,8 @@
-from sqlalchemy import Column, Integer, Float, String, ForeignKey, Index, func
+from sqlalchemy import Column, Integer, Float, String, ForeignKey, Index, func, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, composite
 from sqlalchemy.ext.hybrid import hybrid_property
-from . import value_mapping
+from . import value_mapping, config
 
 Base = declarative_base()
 
@@ -11,7 +11,7 @@ class Category(Base):
     __tablename__ = "categories"
 
     id = Column(Integer, primary_key=True)
-    name = Column(String, unique=True)
+    name = Column(String(config.category_max_length), unique=True)
 
     def __repr__(self):
         return "<Category %r>"%self.name
@@ -83,7 +83,7 @@ class NodeProperty(Base, FlexibleValueStorage):
 
     value_int = Column(Integer)
     value_float = Column(Float)
-    value_str = Column(String)
+    value_str = Column(Text)
 
 
 class EdgeProperty(Base, FlexibleValueStorage):
@@ -97,7 +97,7 @@ class EdgeProperty(Base, FlexibleValueStorage):
 
     value_int = Column(Integer)
     value_float = Column(Float)
-    value_str = Column(String)
+    value_str = Column(Text)
 
 
 Index("edges_node_from_index", Edge.__table__.c.node_from_id)

@@ -4,7 +4,7 @@ import graff
 
 def setup():
     global testdb
-    testdb = graff.Connection()
+    testdb = graff.testing.get_test_connection()
     sim_node = testdb.add_node("simulation")
 
 
