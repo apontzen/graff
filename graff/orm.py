@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, Float, String, ForeignKey, Index, func, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, composite
-from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.orm.properties import CompositeProperty
 from . import value_mapping, config
 
 Base = declarative_base()
@@ -53,26 +53,56 @@ class Edge(Base, SupportsCastToDict):
 
 
 
-class FlexibleValueStorage(object):
+class FlexibleValue(object):
     @classmethod
     def py_coalesce(cls, *args):
         for a in args:
             if a is not None:
                 return a
 
-    @hybrid_property
+    def __init__(self, value_int, value_float, value_str):
+        self.value_int = value_int
+        self.value_float = value_float
+        self.value_str = value_str
+
+    def __composite_values__(self):
+        return self.value_int, self.value_float, self.value_str
+
+    @property
     def value(self):
         return self.py_coalesce(self.value_int, self.value_float, self.value_str)
 
-    @value.expression
-    def value(cls):
-        return func.coalesce(cls.value_int, cls.value_float, cls.value_str)
+    def __repr__(self):
+        return self.value
+
+    def __str__(self):
+        return str(self.value)
+
+    def __int__(self):
+        return self.value_int
+
+    def __float__(self):
+        return self.value_float
+
+    def __eq__(self, other):
+        return self.value==other
+
+    def __hash__(self):
+        return hash(self.value)
 
     @value.setter
     def value(self, val):
         value_mapping.flexible_set_value(self, val)
 
-class NodeProperty(Base, FlexibleValueStorage):
+class FlexibleComparator(CompositeProperty.Comparator):
+    def __gt__(self, other):
+        if hasattr(other, "__composite_values__"):
+            return func.coalesce(*[a>b for a,b in zip(self.__clause_element__().clauses, other.__composite_values__())])
+        else:
+            return func.coalesce(*[a > other for a in self.__clause_element__().clauses])
+
+
+class NodeProperty(Base):
     __tablename__ = "nodeproperties"
 
     id = Column(Integer, primary_key=True)
@@ -85,8 +115,10 @@ class NodeProperty(Base, FlexibleValueStorage):
     value_float = Column(Float)
     value_str = Column(Text)
 
+    value = composite(FlexibleValue, value_int, value_float, value_str, comparator_factory=FlexibleComparator)
 
-class EdgeProperty(Base, FlexibleValueStorage):
+
+class EdgeProperty(Base):
     __tablename__ = "edgeproperties"
 
     id = Column(Integer, primary_key=True)
@@ -98,6 +130,8 @@ class EdgeProperty(Base, FlexibleValueStorage):
     value_int = Column(Integer)
     value_float = Column(Float)
     value_str = Column(Text)
+
+    value = composite(FlexibleValue, value_int, value_float, value_str, comparator_factory=FlexibleComparator)
 
 
 Index("edges_node_from_index", Edge.__table__.c.node_from_id)

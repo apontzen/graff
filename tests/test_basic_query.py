@@ -1,4 +1,4 @@
-import graff, graff.category
+import graff, graff.category, graff.testing
 
 
 
