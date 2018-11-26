@@ -1,0 +1,1 @@
+category_max_length = 256
