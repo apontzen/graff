@@ -13,6 +13,7 @@ def test_add_nodes():
         assert row[0]==i
         assert row[1]==float(i)
         assert row[2]=="test_%d"%i
+    test_db.close()
 
 def test_add_node():
     test_db = graff.testing.get_test_connection()
@@ -24,6 +25,7 @@ def test_add_node():
         assert row[0]==i+1
         assert row[1]==float(i+1)*0.5
         assert row[2]=="test_%d"%(i+1)
+    test_db.close()
 
 def test_add_edges():
     test_db = graff.testing.get_test_connection()
@@ -34,3 +36,4 @@ def test_add_edges():
     result = test_db.query_edge("test_edge").all()
     graff.testing.assert_edge_connections(result, [(1,2), (2,3), (3,4)])
     assert dict(result[0])=={'edge_strength': 1.0}
+    test_db.close()

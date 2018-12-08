@@ -6,6 +6,8 @@ from sqlalchemy import create_engine
 def _wipe_database(uri):
     if '//' not in uri:
         uri = 'sqlite:///' + uri
+    import gc
+    gc.collect() # help ensure there are no dangling connections that would cause a deadlock
     engine = create_engine(uri)
     orm.Base.metadata.drop_all(engine)
     engine.dispose()

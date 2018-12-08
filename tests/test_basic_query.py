@@ -28,7 +28,6 @@ def setup():
     global multiproperty_node
     multiproperty_node = test_db.add_node("multipropertynode", {'property1': 1, 'property2': "two"})
 
-
 def test_query_node():
     assert test_db.query_node("simulation").all() == [sim_node]
     assert test_db.query_node("halo").all() == [halo_node, halo2_node]

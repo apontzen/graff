@@ -51,11 +51,34 @@ class Edge(Base, SupportsCastToDict):
         return "<Edge (%d -> %d) category=%r>"%(self.node_from_id, self.node_to_id, self.category.name)
 
 
+class FlexibleComparator(object):
+    def _get_composite_values_or_elements(self):
+        pass
 
-
-class FlexibleValue(object):
     @classmethod
-    def py_coalesce(cls, *args):
+    def _coalesce(self, *args):
+        return False
+
+    def _op_or_None(self, a, b, op):
+        if b is None:
+            return None
+        return op(a,b)
+
+    def __gt__(self, other):
+        if hasattr(other, "__composite_values__"):
+            return self._coalesce(*[a>b for a,b in zip(self._get_composite_values_or_elements(), other.__composite_values__())])
+        else:
+            return self._coalesce(*[a>other if a is not None else None for a in self._get_composite_values_or_elements()])
+
+class FlexibleStatementComparator(FlexibleComparator, CompositeProperty.Comparator):
+    _coalesce = func.coalesce
+
+    def _get_composite_values_or_elements(self):
+        return self.__clause_element__().clauses
+
+class FlexibleValue(FlexibleComparator):
+    @classmethod
+    def _coalesce(cls, *args):
         for a in args:
             if a is not None:
                 return a
@@ -68,9 +91,13 @@ class FlexibleValue(object):
     def __composite_values__(self):
         return self.value_int, self.value_float, self.value_str
 
+    def _get_composite_values_or_elements(self):
+        return self.__composite_values__()
+
+
     @property
     def value(self):
-        return self.py_coalesce(self.value_int, self.value_float, self.value_str)
+        return self._coalesce(self.value_int, self.value_float, self.value_str)
 
     def __repr__(self):
         return self.value
@@ -79,10 +106,10 @@ class FlexibleValue(object):
         return str(self.value)
 
     def __int__(self):
-        return self.value_int
+        return int(self.value)
 
     def __float__(self):
-        return self.value_float
+        return float(self.value)
 
     def __eq__(self, other):
         return self.value==other
@@ -93,13 +120,6 @@ class FlexibleValue(object):
     @value.setter
     def value(self, val):
         value_mapping.flexible_set_value(self, val)
-
-class FlexibleComparator(CompositeProperty.Comparator):
-    def __gt__(self, other):
-        if hasattr(other, "__composite_values__"):
-            return func.coalesce(*[a>b for a,b in zip(self.__clause_element__().clauses, other.__composite_values__())])
-        else:
-            return func.coalesce(*[a > other for a in self.__clause_element__().clauses])
 
 
 class NodeProperty(Base):
@@ -115,7 +135,7 @@ class NodeProperty(Base):
     value_float = Column(Float)
     value_str = Column(Text)
 
-    value = composite(FlexibleValue, value_int, value_float, value_str, comparator_factory=FlexibleComparator)
+    value = composite(FlexibleValue, value_int, value_float, value_str, comparator_factory=FlexibleStatementComparator)
 
 
 class EdgeProperty(Base):
@@ -131,7 +151,7 @@ class EdgeProperty(Base):
     value_float = Column(Float)
     value_str = Column(Text)
 
-    value = composite(FlexibleValue, value_int, value_float, value_str, comparator_factory=FlexibleComparator)
+    value = composite(FlexibleValue, value_int, value_float, value_str, comparator_factory=FlexibleStatementComparator)
 
 
 Index("edges_node_from_index", Edge.__table__.c.node_from_id)

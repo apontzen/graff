@@ -22,6 +22,10 @@ class Connection(object):
         """Returns the SQLAlchemy Session object that queries will be based upon"""
         return self._internal_session
 
+    def close(self):
+        """Close the connection"""
+        self._internal_session.close_all()
+
     def query_node(self, *args):
         """Returns a query for nodes, optionally of a given category"""
         return query.node.NodeQuery(self, *args)
