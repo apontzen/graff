@@ -1,4 +1,4 @@
-import graff.value_mapping as vm
+import graff.flexible_value as vm
 
 def test_dict_mapping_int():
     d = {}

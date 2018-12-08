@@ -1,6 +1,6 @@
 from .orm import Base, Node, NodeProperty, Edge, EdgeProperty
 from . import query
-from . import category, value_mapping
+from . import category, flexible_value
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from six import iteritems
@@ -115,7 +115,7 @@ class Connection(object):
             for category, value in iteritems(props):
                 category_id = self.category_cache.get_existing_or_new_id(category)
                 dict_this_property = {id_name: first_parent_id + i, 'category_id': category_id}
-                value_mapping.flexible_set_value(dict_this_property, value, attr=False, null_others=False)
+                flexible_value.flexible_set_value(dict_this_property, value, attr=False, null_others=False)
                 property_object_mappings.append(dict_this_property)
         session.bulk_insert_mappings(class_, property_object_mappings)
 
