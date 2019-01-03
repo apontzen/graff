@@ -22,7 +22,11 @@ env:
 #    fi
 
 before_install:
-  - mysql -u root -e 'CREATE DATABASE IF NOT EXISTS test'
+  - if [ $DB = "mysql" ]; then
+      mysql --version;
+      pip install pymysql;
+      mysql -u root -e 'CREATE DATABASE IF NOT EXISTS test';
+    fi
 
 install:
   - python --version
