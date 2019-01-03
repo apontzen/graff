@@ -1,4 +1,4 @@
-from . import connection, orm
+from . import connection, orm, compatibility
 import random
 import os
 from sqlalchemy import create_engine
@@ -47,7 +47,7 @@ some_names = ['Aarhus', 'Aeneid', 'Aldrich', 'Amelia', 'Anita', 'Ares', 'Atalant
               'Wylie', 'Zen']
 
 def init_friends_network(n_people=1000, n_connections=10000, db_uri=None):
-    rng = random.Random(1)
+    rng = compatibility.Random(1)
     con = get_test_connection(db_uri)
 
     people_from = rng.choices(range(1,n_people+1), k=n_connections)

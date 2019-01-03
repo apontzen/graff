@@ -1,4 +1,4 @@
-import functools
+from .compatibility import partialmethod
 from sqlalchemy.orm.properties import CompositeProperty
 from sqlalchemy import func
 
@@ -67,8 +67,8 @@ class FlexibleOperators(object):
 for op in "gt", "lt", "ge", "le", "eq", "ne", "div", "mul", "truediv", \
           "rtruediv", "rdiv", "rmul", "add", "sub", "radd", "rsub":
     opname = "__" + op + "__"
-    setattr(FlexibleOperators, opname, functools.partialmethod(FlexibleOperators._intelligent_operator,
-                                                               op=opname))
+    setattr(FlexibleOperators, opname, partialmethod(FlexibleOperators._intelligent_operator,
+                                                      op=opname))
 
 
 class FlexibleStatementComparator(FlexibleOperators, CompositeProperty.Comparator):
