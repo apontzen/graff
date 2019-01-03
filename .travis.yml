@@ -9,17 +9,20 @@ env:
   - DB=mysql
   - DB=sqlite
 
-services:
-  - docker
+#services:
+#  - docker
+
+#before_install:
+#  - if [ $DB = "mysql" ]; then
+#       docker pull mysql:8.0;
+#       docker run -p 3306:3306 --name mysql -e MYSQL_ROOT_PASSWORD=password -d mysql;
+#       docker ps -a;
+#       docker exec mysql mysql -ppassword --execute="CREATE DATABASE test";
+#       pip install pymysql;
+#    fi
 
 before_install:
-  - if [ $DB = "mysql" ]; then
-       docker pull mysql:8.0;
-       docker run -p 3306:3306 --name mysql -e MYSQL_ROOT_PASSWORD=password -d mysql;
-       docker ps -a;
-       docker exec mysql mysql -ppassword --execute="CREATE DATABASE test";
-       pip install pymysql;
-    fi
+  - mysql -u root -e 'CREATE DATABASE IF NOT EXISTS test'
 
 install:
   - python --version
@@ -27,6 +30,6 @@ install:
   - python setup.py install
 
 script:
-  - if [ $DB = "mysql" ]; then export GRAFF_TEST_DATABASE_URI=mysql+pymysql://root:password@localhost/test; fi
+  - if [ $DB = "mysql" ]; then export GRAFF_TEST_DATABASE_URI=mysql+pymysql://root@localhost/test; fi
   - cd tests
   - nosetests
