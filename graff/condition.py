@@ -1,5 +1,6 @@
 import operator as op
 import sqlalchemy.sql as sql
+from .flexible_value import FlexibleStatementComparator
 
 class Condition(object):
     def get_unresolved_property_names(self):
@@ -138,8 +139,16 @@ class BinaryOperator(Condition):
         self._second.assign_sql_columns(assignment_dictionary)
 
     def to_sql(self):
-        return self._comparison_operator(self._first.to_sql(), self._second.to_sql())
-
+        first_sql = self._first.to_sql()
+        second_sql = self._second.to_sql()
+        if isinstance(second_sql.comparator, FlexibleStatementComparator):
+            # always give our own comparator precedence
+            #
+            # This is a bit of a hack to fix a problem where the default SQLAlchemy comparator would be called
+            # with a composite column on the RHS; the default comparator would then crash.
+            return second_sql.comparator._reverse_intelligent_operator(first_sql, self._comparison_operator)
+        else:
+            return self._comparison_operator(first_sql, second_sql)
 class UnaryOperator(Condition):
     def __init__(self, underlying, operator):
         self._underlying = underlying

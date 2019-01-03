@@ -33,7 +33,7 @@ def flexible_set_value(object, value, attr=True, null_others=True):
 
 class FlexibleOperators(object):
     def _get_composite_values_or_elements(self):
-        pass
+        return []
 
     @classmethod
     def _coalesce(self, *args):
@@ -42,7 +42,16 @@ class FlexibleOperators(object):
     def _op_or_None(self, a, b, op):
         if a is None:
             return None
-        return getattr(a, op)(b)
+
+        if hasattr(op, "__call__"):
+            value = op(a,b)
+        else:
+            value = getattr(a,op)(b)
+
+        if value is NotImplemented:
+            return None
+        else:
+            return value
 
     def _intelligent_operator(self, other, op="__gt__"):
         if hasattr(other, "__composite_values__"):
@@ -50,6 +59,9 @@ class FlexibleOperators(object):
                                     zip(self._get_composite_values_or_elements(), other.__composite_values__())])
         else:
             return self._coalesce(*[self._op_or_None(a, other, op) for a in self._get_composite_values_or_elements()])
+
+    def _reverse_intelligent_operator(self, other, op="__gt__"):
+        return self._coalesce(*[self._op_or_None(other, a, op) for a in self._get_composite_values_or_elements()])
 
 
 for op in "gt", "lt", "ge", "le", "eq", "ne", "div", "mul", "truediv", \

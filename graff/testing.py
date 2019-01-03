@@ -23,8 +23,8 @@ def init_ownership_graph(db_uri=None):
 
     con = get_test_connection(db_uri)
 
-    person_node1 = con.add_node("person", {"net_worth": 1000, "name": "John McGregor"})
-    person_node2 = con.add_node("person", {"net_worth": 10000, "name": "Sir Richard Stiltington"})
+    person_node1 = con.add_node("person", {"net_worth": 1000.0, "name": "John McGregor"})
+    person_node2 = con.add_node("person", {"net_worth": 10000.0, "name": "Sir Richard Stiltington"})
 
     for i in range(50):
         thing_node = con.add_node("thing", {"price": float(i) * 10.0, "value": float(50-i)})

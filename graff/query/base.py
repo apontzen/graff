@@ -1,4 +1,5 @@
 import copy
+import sqlalchemy
 from sqlalchemy import Integer, ForeignKey, sql
 from sqlalchemy.orm import aliased, joinedload
 
@@ -339,8 +340,25 @@ class FilterNamedPropertiesQuery(QueryWithValuesForInternalUse):
         self._condition.assign_sql_columns(value_map)
 
         delete_condition = ~(self._condition.to_sql()) # delete what we don't want to keep
+
         subq = subq.filter(delete_condition).subquery() # This subquery now identifies the IDs we don't want to keep
 
-        delete_query = tt.delete().where(tt.c.id.in_(subq))
+        # Original - works on Sqlite but not MySql which doesn't permit multiple references to temp table in one query:
+        # delete_query = tt.delete().where(tt.c.id.in_(subq))
+        # self._connection.execute(delete_query)
 
-        self._connection.execute(delete_query)
+        tt_for_ids = TempTableState()
+        tt_for_ids.add_column('delete_row_id', Integer)
+        tt_for_ids.create(self._session)
+        try:
+            self._connection.execute(tt_for_ids.get_table().insert().from_select(['delete_row_id'], subq))
+            subq2 = sqlalchemy.select([tt_for_ids.get_table().c.delete_row_id])
+            delete_query = tt.delete().where(tt.c.id.in_(subq2))
+            self._connection.execute(delete_query)
+        finally:
+            tt_for_ids.destroy()
+
+
+
+
+
