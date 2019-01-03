@@ -149,6 +149,7 @@ class BinaryOperator(Condition):
             return second_sql.comparator._reverse_intelligent_operator(first_sql, self._comparison_operator)
         else:
             return self._comparison_operator(first_sql, second_sql)
+
 class UnaryOperator(Condition):
     def __init__(self, underlying, operator):
         self._underlying = underlying
