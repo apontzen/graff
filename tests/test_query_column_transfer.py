@@ -14,8 +14,11 @@ def test_column_transfer():
 
 def test_column_all_property_transfer():
     results = test_db.query_node("person").return_properties().follow("owns").return_property("price").all()
-    assert len(results[0]) == 2
-    assert (results[1][0]=={'net_worth': 1000, 'name': 'John McGregor'})
+    assert len(results)==60
+    for person_info, price in results:
+        assert (person_info['net_worth']==1000 and person_info['name']=="John McGregor") or\
+               (person_info['net_worth']==10000 and person_info['name']=="Sir Richard Stiltington")
+        assert price<person_info['net_worth']/10
 
 
 def test_column_backreference_in_filter():
