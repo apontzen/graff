@@ -12,14 +12,13 @@ from setuptools import setup, find_packages
 
 
 setup(name='graff',
-      version='1.0',
+      version='1.0.1',
       description='A graph database built on top of SQLAlchemy',
       classifiers=[
           "Development Status :: 3 - Alpha",
           "Intended Audience :: Developers",
           "Programming Language :: Python",
           "Programming Language :: Python :: 2.7",
-          "Programming Language :: Python :: 3.5",
           "Programming Language :: Python :: 3.6",
           "Programming Language :: Python :: 3.7",
           "License :: OSI Approved :: BSD License",
@@ -28,6 +27,7 @@ setup(name='graff',
       author_email="a.pontzen@ucl.ac.uk",
       license="BSD",
       packages=find_packages(),
+      url="https://github.com/apontzen/graff",
       entry_points={},
       include_package_data=True,
       zip_safe=False,
