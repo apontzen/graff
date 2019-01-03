@@ -14,11 +14,11 @@ services:
 
 before_install:
   - if [ $DB = "mysql" ]; then
-       docker pull mysql:8.0
-       docker run -p 3306:3306 --name mysql -e MYSQL_ROOT_PASSWORD=password -d mysql
-       docker ps -a
-       docker exec mysql mysql -ppassword --execute="CREATE DATABASE test"
-       pip install pymysql
+       docker pull mysql:8.0;
+       docker run -p 3306:3306 --name mysql -e MYSQL_ROOT_PASSWORD=password -d mysql;
+       docker ps -a;
+       docker exec mysql mysql -ppassword --execute="CREATE DATABASE test";
+       pip install pymysql;
     fi
 
 install:
