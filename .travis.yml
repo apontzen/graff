@@ -13,12 +13,13 @@ services:
   - docker
 
 before_install:
-  - test $DB = "mysql" \
-   && docker pull mysql:8.0 \
-   && docker run -p 3306:3306 --name mysql -e MYSQL_ROOT_PASSWORD=password -d mysql \
-   && docker ps -a \
-   && docker exec mysql mysql -ppassword --execute="CREATE DATABASE test"
-   && pip install pymysql
+  - if [ $DB = "mysql" ]; then
+       docker pull mysql:8.0
+       docker run -p 3306:3306 --name mysql -e MYSQL_ROOT_PASSWORD=password -d mysql
+       docker ps -a
+       docker exec mysql mysql -ppassword --execute="CREATE DATABASE test"
+       pip install pymysql
+    fi
 
 install:
   - python --version
@@ -26,6 +27,6 @@ install:
   - python setup.py install
 
 script:
-  - test $DB = "mysql" && export GRAFF_TEST_DATABASE_URI=mysql+pymysql://root:password@localhost/test
+  - if [ $DB = "mysql" ]; then export GRAFF_TEST_DATABASE_URI=mysql+pymysql://root:password@localhost/test; fi
   - cd tests
   - nosetests
