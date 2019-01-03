@@ -1,4 +1,5 @@
 <img src="docs/graff.svg" width=200 title="graff">
+
 [![Build Status](https://travis-ci.com/apontzen/graff.svg?branch=master)](https://travis-ci.com/apontzen/graff)
 
 _Graff_ is a graph database for python, implemented using [sqlalchemy](http://www.sqlalchemy.org) for 
