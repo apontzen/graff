@@ -13,7 +13,7 @@ from setuptools import setup, find_packages
 
 setup(name='graff',
       version='1.0',
-      description='A graph database built on top of sqlalchemy',
+      description='A graph database built on top of SQLAlchemy',
       classifiers=[
           "Development Status :: 3 - Alpha",
           "Intended Audience :: Developers",
